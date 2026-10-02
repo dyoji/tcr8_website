@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tcr8.co/sitemap.xml

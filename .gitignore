@@ -1,0 +1,5 @@
+# Configuração com senha do formulário de contato — nunca versionar
+config-contato-tcr8.php
+config-contato*.php
+!contato.config.example.php
+.claude/

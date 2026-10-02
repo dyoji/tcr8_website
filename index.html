@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>transCr8 — Sistema de gestão para varejo e recreação infantil</title>
+  <meta name="description" content="Caixa, estoque, clientes e notas fiscais de lojas de varejo e espaços de recreação infantil num sistema só. Várias lojas, NFC-e e NF-e emitidas pelo próprio sistema, direto do navegador.">
+  <meta name="theme-color" content="#0c1810">
+  <link rel="canonical" href="https://tcr8.co/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="transCr8">
+  <meta property="og:title" content="transCr8 — Do caixa à nota fiscal, a loja inteira num sistema só">
+  <meta property="og:description" content="Sistema de gestão para varejo e recreação infantil: caixa, estoque de várias lojas, clientes, NFC-e e NF-e, relatórios e integrações.">
+  <meta property="og:url" content="https://tcr8.co/">
+  <meta property="og:image" content="https://tcr8.co/assets/img/og-tcr8.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="pt_BR">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="assets/img/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="assets/img/favicon-16.png" type="image/png" sizes="16x16">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css?v=1">
+
+  <script>document.documentElement.classList.add('js');</script>
+  <script src="assets/js/main.js?v=1" defer></script>
+  <script src="assets/js/demo.js?v=1" defer></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "transCr8",
+    "alternateName": "tcr8",
+    "url": "https://tcr8.co/",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "inLanguage": "pt-BR",
+    "description": "Sistema de gestão para lojas de varejo e espaços de recreação infantil: frente de caixa, estoque de várias lojas, clientes, NFC-e e NF-e, relatórios e integrações.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "Mikami Hub",
+      "url": "https://mikamihub.com/",
+      "email": "contato@mikamihub.com"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+  <!-- Ícones (traço) usados nas seções -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/></symbol>
+    <symbol id="i-boxes" viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M2 6h12v10H2zM14 10h4l3 3v3h-7"/><circle cx="6.5" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7.5" cy="7.5" r="1.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 13.8c2 .8 3.5 3 3.5 6.2"/></symbol>
+    <symbol id="i-medal" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6"/><path d="M8.5 10.2 6 3h4l2 5 2-5h4l-2.5 7.2"/><path d="m12 12.5.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z"/></symbol>
+    <symbol id="i-hanger" viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 1 2-2c0 1-.8 1.4-1.4 1.8-.4.3-.6.6-.6 1.2v.5"/><path d="m12 9.5 9 6.5c.8.6.4 2-.6 2H3.6c-1 0-1.4-1.4-.6-2z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3c-.7 1 .7 2 0 3M12 3c-.7 1 .7 2 0 3"/></symbol>
+    <symbol id="i-cake" viewBox="0 0 24 24"><path d="M4 21h16M5 21v-8h14v8M5 16.5c1.5 1 3 1 4.5 0s3-1 4.5 0 3 1 5 0M12 13v-3"/><path d="M12 7.5a1.5 1.5 0 0 1-1.5-1.5c0-1.2 1.5-3 1.5-3s1.5 1.8 1.5 3A1.5 1.5 0 0 1 12 7.5z"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2M6 6l9-3 1 3"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M3 3l18 18M8.5 16.4a5 5 0 0 1 6-.8M5 12.9a10 10 0 0 1 4.6-2.6M19 12.9a10 10 0 0 0-2.2-1.6M2 8.8a15 15 0 0 1 3.8-2.4M22 8.8A15 15 0 0 0 11 5.1"/><path d="M12 20h.01"/></symbol>
+    <symbol id="i-return" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M12 3v10M8 9l4 4 4-4"/><path d="M3 14h5l1.5 3h5L16 14h5v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-percent" viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></symbol>
+    <symbol id="i-cert" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 8h6M7 11h4"/><circle cx="16.5" cy="13.5" r="2.5"/><path d="m15 15.5-.8 4.5 2.3-1.2 2.3 1.2-.8-4.5"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 4h18l-1 6H4z"/><path d="M10 20v-5h4v5"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14.5 8.5l2 2"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-printer" viewBox="0 0 24 24"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/></symbol>
+    <symbol id="i-barcode" viewBox="0 0 24 24"><path d="M4 5v14M7 5v14M10 5v14M14 5v14M16 5v14M20 5v14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+    <symbol id="i-cap" viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2.5 9 2.5 12 0v-5M22 9v6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4.3M4 4v3h3"/><path d="M4 13a8 8 0 0 0 14.7 4.3M20 20v-3h-3"/></symbol>
+    <symbol id="i-login" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11M10 8l4 4-4 4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="#topo" aria-label="transCr8 — início">
+        <img class="brand-mark" src="assets/img/gecko.svg" alt="" width="40" height="40">
+        <span class="brand-name">trans<b>Cr8</b></span>
+      </a>
+
+      <nav class="nav-menu" id="menu" aria-label="Seções do site">
+        <ul>
+          <li><a href="#varejo">Varejo</a></li>
+          <li><a href="#recreacao">Recreação</a></li>
+          <li><a href="#gestao">Gestão</a></li>
+          <li><a href="#fiscal">Fiscal</a></li>
+          <li><a href="#integracoes">Integrações</a></li>
+          <li><a href="#duvidas">Dúvidas</a></li>
+        </ul>
+        <div class="nav-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-open-login>
+            <svg class="ic" aria-hidden="true"><use href="#i-login"/></svg>Entrar
+          </button>
+          <a class="btn btn-primary btn-sm" href="#contato">Fale com a gente</a>
+        </div>
+      </nav>
+
+      <button class="nav-toggle" type="button" aria-controls="menu" aria-expanded="false" aria-label="Abrir menu">
+        <svg class="ic ic-open" aria-hidden="true"><use href="#i-menu"/></svg>
+        <svg class="ic ic-close" aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="conteudo">
+    <!-- ============================== Topo ============================== -->
+    <section class="hero" id="topo">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow eyebrow-dark">Sistema de gestão para lojas</p>
+          <h1>Do caixa à nota fiscal, a loja inteira <span class="mark">num sistema só</span>.</h1>
+          <p class="hero-lead">O transCr8 cuida de vendas, estoque, clientes e notas fiscais de <strong>lojas de varejo</strong> e <strong>espaços de recreação infantil</strong>. Uma loja ou várias, direto do navegador, no computador, no tablet ou no celular.</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary btn-lg" href="#contato">Agendar uma demonstração <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            <a class="btn btn-outline-light btn-lg" href="#varejo">Ver o que ele faz</a>
+          </div>
+          <ul class="hero-proof">
+            <li><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg>NFC-e e NF-e emitidas pelo sistema</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-store"/></svg>Várias lojas, um só cadastro</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg>Funciona no PC, tablet e celular</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual">
+          <p class="sr-only">Demonstração animada: uma venda sendo registrada no caixa, a NFC-e autorizada e o estoque atualizado nas lojas; depois, a tela da recreação com as crianças no espaço e o tempo de cada uma.</p>
+          <img class="hero-gecko" src="assets/img/gecko.svg" alt="" width="150" height="150" aria-hidden="true">
+          <div class="mock" aria-hidden="true">
+            <div class="mock-bar">
+              <span class="mock-dots"><i></i><i></i><i></i></span>
+              <span class="mock-url">centro.tcr8.co</span>
+              <span class="mock-clock" data-clock>15:42</span>
+            </div>
+            <div class="mock-tabs">
+              <button type="button" tabindex="-1" class="is-on" data-scene-tab="caixa"><svg class="ic" aria-hidden="true"><use href="#i-receipt"/></svg>Caixa</button>
+              <button type="button" tabindex="-1" data-scene-tab="kids"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Recreação</button>
+            </div>
+
+            <!-- Cena 1: caixa -->
+            <div class="mock-scene is-on" data-scene="caixa">
+              <div class="mock-cols">
+                <div class="mock-panel">
+                  <div class="mock-h"><span>Venda nº 4.218</span><span class="muted">Vendedora: Ana</span></div>
+                  <ul class="mock-items" data-items>
+                    <li><span class="it-name">Vestido midi linho<small>M · Areia</small></span><span class="it-price">R$ 289,90</span></li>
+                    <li><span class="it-name">Camisa de algodão<small>P · Branco</small></span><span class="it-price">R$ 159,90</span></li>
+                    <li><span class="it-name">Cinto de couro<small>Único · Caramelo</small></span><span class="it-price">R$ 89,90</span></li>
+                  </ul>
+                  <div class="mock-total"><span>Total</span><strong data-total>R$ 539,70</strong></div>
+                  <div class="mock-pay" data-pay>
+                    <span class="is-on">Pix</span><span>Crédito</span><span>Débito</span><span>Dinheiro</span>
+                  </div>
+                </div>
+                <div class="mock-panel mock-side">
+                  <div class="mock-h"><span>Estoque</span><span class="muted">Vestido midi · M</span></div>
+                  <ul class="stock" data-stock>
+                    <li data-store="centro"><span>Centro</span><span class="bar"><i style="--v:.3"></i></span><b>3</b></li>
+                    <li><span>Shopping Norte</span><span class="bar"><i style="--v:.6"></i></span><b>6</b></li>
+                    <li><span>Matriz</span><span class="bar"><i style="--v:.9"></i></span><b>9</b></li>
+                  </ul>
+                  <div class="mock-mini">
+                    <span class="muted">Hoje · todas as lojas</span>
+                    <strong data-today>R$ 28.850</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="mock-toast is-on" data-toast>
+                <span class="toast-dot"></span><span data-toast-text>NFC-e autorizada · Protocolo 135 2610 0042 118</span>
+              </div>
+            </div>
+
+            <!-- Cena 2: recreação -->
+            <div class="mock-scene" data-scene="kids">
+              <div class="mock-panel">
+                <div class="mock-h"><span>No espaço agora</span><span class="muted" data-kids-count>4 crianças</span></div>
+                <ul class="kids" data-kids>
+                  <li><span class="av" style="--c:#FCD402">H</span><span class="k-name">Helena<small>4 anos · Cartão VIP</small></span><span class="k-time" data-min="98">1h38</span></li>
+                  <li><span class="av" style="--c:#A4E45A">T</span><span class="k-name">Theo<small>6 anos · Oficina de slime 16h</small></span><span class="k-time" data-min="72">1h12</span></li>
+                  <li><span class="av" style="--c:#8FD3FF">M</span><span class="k-name">Maria<small>3 anos · Lanchonete liberada</small></span><span class="k-time" data-min="37">0h37</span></li>
+                  <li><span class="av" style="--c:#FFB4A2">L</span><span class="k-name">Lucas<small>5 anos · Entrou pelo app</small></span><span class="k-time" data-min="2">0h02</span></li>
+                </ul>
+              </div>
+              <div class="mock-toast is-on" data-kids-toast>
+                <span class="toast-dot"></span><span data-kids-toast-text>Check-in pelo app · Lucas, 5 anos</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Para quem ============================== -->
+    <section class="section segments" aria-labelledby="seg-title">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">Para quem é</p>
+          <h2 id="seg-title">Dois tipos de loja, o mesmo cuidado com o balcão</h2>
+          <p class="lead">O transCr8 nasceu para lojas de moda em shopping e cresceu para espaços de recreação infantil. Os dois usam a mesma base: caixa, clientes, estoque, nota fiscal e relatórios.</p>
+        </div>
+        <div class="seg-grid">
+          <a class="seg-card seg-retail reveal" href="#varejo">
+            <span class="seg-icon"><svg class="ic" aria-hidden="true"><use href="#i-hanger"/></svg></span>
+            <h3>Varejo</h3>
+            <p>Lojas de roupas, calçados, acessórios e presentes — de rua ou de shopping, com uma ou muitas unidades.</p>
+            <ul class="tick">
+              <li>Caixa rápido, trocas e vale-troca</li>
+              <li>Estoque por loja, cor e tamanho</li>
+              <li>Vendedoras e metas por loja</li>
+            </ul>
+            <span class="seg-link">Ver recursos para varejo <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></span>
+          </a>
+          <a class="seg-card seg-kids reveal" href="#recreacao">
+            <span class="seg-icon"><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg></span>
+            <h3>Recreação infantil</h3>
+            <p>Espaços kids, brinquedotecas e parques indoor que cobram por tempo e vendem oficinas, lanches e festas.</p>
+            <ul class="tick">
+              <li>Entrada e saída com cobrança por tempo</li>
+              <li>Cartões VIP e pacotes de horas</li>
+              <li>Oficinas, lanchonete e festas na mesma comanda</li>
+            </ul>
+            <span class="seg-link">Ver recursos para recreação <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Varejo ============================== -->
+    <section class="section section-alt" id="varejo" aria-labelledby="varejo-title">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">Para o varejo</p>
+          <h2 id="varejo-title">Tudo o que acontece no balcão, no lugar certo</h2>
+          <p class="lead">Da venda no caixa à peça que precisa ir para outra loja: cada movimento fica registrado e o estoque de todas as unidades bate com o que está na arara.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-receipt"/></svg></span>
+            <h3>Frente de caixa</h3>
+            <p>Venda no computador ou no tablet, com leitor de código de barras, várias formas de pagamento na mesma venda e cupom na impressora térmica.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-swap"/></svg></span>
+            <h3>Trocas e devoluções</h3>
+            <p>Vale-troca impresso com código, que qualquer loja da rede aceita. Cancelamento e reimpressão com permissão e registro de quem fez.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-boxes"/></svg></span>
+            <h3>Estoque de todas as lojas</h3>
+            <p>Saldo por loja, cor e tamanho, com o histórico de cada entrada, venda, troca e ajuste. Veja na hora em qual unidade a peça está.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-truck"/></svg></span>
+            <h3>Transferência entre lojas</h3>
+            <p>A loja que envia imprime um cupom com código de barras; a que recebe bipa e confere. A nota fiscal da transferência sai pelo sistema.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-tag"/></svg></span>
+            <h3>Etiquetas</h3>
+            <p>Etiquetas com preço e código de barras impressas direto na etiquetadora, sem gerar PDF e sem trocar de programa.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg></span>
+            <h3>Clientes</h3>
+            <p>Cadastro único para toda a rede, histórico de compras, aniversariantes do mês e registro de cada alteração no cadastro.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-medal"/></svg></span>
+            <h3>Vendedoras e metas</h3>
+            <p>Cada venda com a sua vendedora, metas da loja em até três níveis e o desempenho de cada uma no período.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-hanger"/></svg></span>
+            <h3>Produtos e vitrine</h3>
+            <p>Coleções, cores e categorias organizadas. Ranking de venda por coleção, peças paradas e o que saiu da vitrine, para decidir remarcação e reposição.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Recreação ============================== -->
+    <section class="section" id="recreacao" aria-labelledby="kids-title">
+      <div class="container split">
+        <div class="split-copy">
+          <div class="section-head section-head-left reveal">
+            <p class="eyebrow">Para recreação infantil</p>
+            <h2 id="kids-title">O relógio corre, a comanda acompanha</h2>
+            <p class="lead">Entrada, tempo de permanência, oficinas e lanchonete somam na mesma comanda. Na saída, o sistema já sabe quanto cobrar — com tolerância, pacote ou cartão VIP.</p>
+          </div>
+          <ul class="kid-features">
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg></span><div><h3>Cobrança por tempo</h3><p>Tabela de preço por hora, fração e tolerância, configurável por loja e por dia da semana.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg></span><div><h3>Cartões VIP e pacotes</h3><p>Horas pré-pagas com saldo, validade e regras de uso. O desconto entra sozinho no fechamento.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg></span><div><h3>Oficinas com agenda</h3><p>Calendário de oficinas com vagas, inscrições e relatório de quem participou.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-cup"/></svg></span><div><h3>Lanchonete na comanda</h3><p>O responsável libera o que a criança pode consumir; o lanche entra na conta da família.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-cake"/></svg></span><div><h3>Festas</h3><p>Agenda de festas e eventos junto com o movimento do dia.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-qr"/></svg></span><div><h3>App para as famílias</h3><p>QR code de entrada, crianças cadastradas, cartões e novidades da loja no celular dos pais.</p></div></li>
+          </ul>
+        </div>
+
+        <div class="split-visual reveal" aria-hidden="true">
+          <div class="ticket">
+            <div class="ticket-head">
+              <div>
+                <span class="muted">Comanda</span>
+                <strong>nº 1.532 · Família Souza</strong>
+              </div>
+              <span class="pill pill-live"><i></i>No espaço</span>
+            </div>
+            <ul class="ticket-kids">
+              <li>
+                <span class="av" style="--c:#FCD402">H</span>
+                <div><strong>Helena, 4 anos</strong><span class="muted">Entrada 14:02 · 1h38</span></div>
+                <span class="pill pill-vip">VIP</span>
+              </li>
+              <li>
+                <span class="av" style="--c:#A4E45A">T</span>
+                <div><strong>Theo, 6 anos</strong><span class="muted">Entrada 14:30 · 1h12</span></div>
+                <span class="pill">Pacote</span>
+              </li>
+            </ul>
+            <div class="ticket-lines">
+              <div><span>Permanência Helena</span><span class="muted">cartão VIP</span><span>R$ 0,00</span></div>
+              <div><span>Permanência Theo</span><span class="muted">1h15 · tolerância</span><span>R$ 62,00</span></div>
+              <div><span>Oficina de slime</span><span class="muted">16h · Theo</span><span>R$ 45,00</span></div>
+              <div><span>Lanchonete</span><span class="muted">suco + pão de queijo</span><span>R$ 18,50</span></div>
+            </div>
+            <div class="ticket-vip">
+              <svg class="ic" aria-hidden="true"><use href="#i-star"/></svg>
+              <span>Cartão VIP Gold · <strong>6h30</strong> restantes · vale até 12/2026</span>
+            </div>
+            <div class="ticket-foot">
+              <div><span class="muted">Total</span><strong>R$ 125,50</strong></div>
+              <span class="btn btn-primary btn-sm">Fechar comanda</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Gestão ============================== -->
+    <section class="section section-alt" id="gestao" aria-labelledby="gestao-title">
+      <div class="container split split-reverse">
+        <div class="split-visual reveal" aria-hidden="true">
+          <div class="dash">
+            <div class="dash-head">
+              <div><span class="muted">Relatório administrativo</span><strong>Hoje · todas as lojas</strong></div>
+              <span class="pill">Atualizado agora</span>
+            </div>
+            <div class="dash-kpis">
+              <div><span class="muted">Vendas</span><strong>R$ 28.850</strong><em class="up">+12%</em></div>
+              <div><span class="muted">Peças</span><strong>214</strong><em class="up">+8%</em></div>
+              <div><span class="muted">Ticket médio</span><strong>R$ 312</strong><em>estável</em></div>
+            </div>
+            <ul class="dash-bars">
+              <li><span>Shopping Norte</span><span class="bar"><i style="--v:1"></i></span><b>R$ 12.310</b></li>
+              <li><span>Centro</span><span class="bar"><i style="--v:.68"></i></span><b>R$ 8.420</b></li>
+              <li><span>Matriz</span><span class="bar"><i style="--v:.49"></i></span><b>R$ 5.980</b></li>
+              <li><span>Loja online</span><span class="bar"><i style="--v:.17"></i></span><b>R$ 2.140</b></li>
+            </ul>
+            <div class="dash-pay">
+              <span class="muted">Formas de pagamento</span>
+              <div class="stack"><i style="--w:38%;--c:var(--brand-600)"></i><i style="--w:34%;--c:var(--lime)"></i><i style="--w:18%;--c:var(--yellow)"></i><i style="--w:10%;--c:#c9d6c2"></i></div>
+              <div class="stack-legend"><span><i style="--c:var(--brand-600)"></i>Crédito</span><span><i style="--c:var(--lime)"></i>Pix</span><span><i style="--c:var(--yellow)"></i>Débito</span><span><i style="--c:#c9d6c2"></i>Dinheiro</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="split-copy">
+          <div class="section-head section-head-left reveal">
+            <p class="eyebrow">Gestão</p>
+            <h2 id="gestao-title">Todas as lojas numa tela, sem esperar o fechamento</h2>
+            <p class="lead">Quem administra vê vendas, peças, clientes e caixa de toda a rede ao mesmo tempo — e decide quem da equipe pode ver e fazer o quê.</p>
+          </div>
+          <ul class="check-list">
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg></span><div><h3>Relatórios de verdade</h3><p>Vendas por loja, período, vendedora e forma de pagamento; produtos parados; clientes novos e recorrentes; frequência das famílias na recreação.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg></span><div><h3>Financeiro do dia a dia</h3><p>Faturamento, despesas e conferência de caixa por loja, com o que entrou em cada forma de pagamento.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></span><div><h3>Permissões por pessoa</h3><p>Desconto, cancelamento, devolução, relatórios: cada ação liberada só para quem precisa, por usuário.</p></div></li>
+            <li class="reveal"><span class="f-icon f-icon-sm"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></span><div><h3>Quem fez o quê</h3><p>Registro das ações da equipe e do histórico de cada cadastro. Dúvida sobre uma venda? A resposta está no sistema.</p></div></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Fiscal ============================== -->
+    <section class="section section-dark" id="fiscal" aria-labelledby="fiscal-title">
+      <div class="container split">
+        <div class="split-copy">
+          <div class="section-head section-head-left reveal">
+            <p class="eyebrow eyebrow-dark">Fiscal</p>
+            <h2 id="fiscal-title">Nota fiscal sem sair do caixa</h2>
+            <p class="lead">A NFC-e sai junto com a venda e as notas de devolução e transferência são geradas pelo próprio sistema, já referenciando a nota de origem.</p>
+          </div>
+          <div class="fiscal-grid">
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-receipt"/></svg><h3>NFC-e na hora</h3><p>Cupom fiscal com QR Code impresso na térmica de 80 mm, sem digitar nada duas vezes.</p></div>
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-wifi-off"/></svg><h3>Contingência off-line</h3><p>A internet caiu? A venda continua e a nota é transmitida quando a conexão volta.</p></div>
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-return"/></svg><h3>Devolução e transferência</h3><p>NF-e de devolução junto do vale-troca e NF-e de transferência entre lojas, emitidas pelo sistema.</p></div>
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-inbox"/></svg><h3>Notas dos fornecedores</h3><p>O sistema busca na SEFAZ as notas emitidas para o seu CNPJ, registra a ciência e baixa os XMLs sozinho.</p></div>
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-percent"/></svg><h3>Reforma tributária</h3><p>Campos de IBS e CBS já no layout da NFC-e, acompanhando o cronograma da reforma.</p></div>
+            <div class="fiscal-item reveal"><svg class="ic" aria-hidden="true"><use href="#i-cert"/></svg><h3>Certificado e CSC</h3><p>Certificado digital A1 e códigos de segurança configurados por loja, com os XMLs guardados.</p></div>
+          </div>
+        </div>
+
+        <div class="split-visual reveal" aria-hidden="true">
+          <div class="receipt">
+            <div class="receipt-paper">
+              <p class="r-center"><strong>LOJA EXEMPLO LTDA</strong><br>CNPJ 00.000.000/0001-00<br>Documento Auxiliar da NFC-e</p>
+              <div class="r-sep"></div>
+              <div class="r-row"><span>Vestido midi linho M</span><span>289,90</span></div>
+              <div class="r-row"><span>Camisa de algodão P</span><span>159,90</span></div>
+              <div class="r-row"><span>Cinto de couro</span><span>89,90</span></div>
+              <div class="r-sep"></div>
+              <div class="r-row r-strong"><span>Qtde. total de itens</span><span>3</span></div>
+              <div class="r-row r-strong"><span>Valor a pagar R$</span><span>539,70</span></div>
+              <div class="r-row"><span>Pix</span><span>539,70</span></div>
+              <div class="r-sep"></div>
+              <div class="r-qr"><span class="qr" data-fake-qr></span><p>NFC-e nº 042118 Série 1<br>Protocolo de autorização<br>135 2610 0042 118</p></div>
+            </div>
+            <span class="stamp">Autorizada</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Integrações ============================== -->
+    <section class="section" id="integracoes" aria-labelledby="int-title">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">Integrações</p>
+          <h2 id="int-title">Conversa com o que a sua loja já usa</h2>
+          <p class="lead">Impressoras, etiquetadoras, sistema contábil, shopping e os seus próprios aplicativos.</p>
+        </div>
+        <div class="int-grid">
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-printer"/></svg></span><div><h3>Impressoras e leitores</h3><p>Térmicas de cupom, etiquetadoras e leitores de código de barras. No celular, a câmera vira leitor.</p></div></article>
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg></span><div><h3>Omie</h3><p>Produtos e estoque sincronizados, ordens de serviço e NFS-e para quem usa o Omie na contabilidade.</p></div></article>
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-store"/></svg></span><div><h3>Shopping</h3><p>Envio automático das vendas para o sistema de auditoria do shopping, sem planilha no fim do mês.</p></div></article>
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg></span><div><h3>API com chaves</h3><p>Integre site, app ou outro sistema com chaves de acesso limitadas por empresa, loja e permissão.</p></div></article>
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg></span><div><h3>App das famílias</h3><p>Para a recreação: app iOS e Android ligado ao cadastro, com QR de entrada e cartões fidelidade.</p></div></article>
+          <article class="int reveal"><span class="f-icon"><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg></span><div><h3>Contador</h3><p>XMLs de todas as notas guardados e organizados por loja, prontos para a contabilidade.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== História ============================== -->
+    <section class="section section-alt story" aria-labelledby="story-title">
+      <div class="container story-grid">
+        <div class="story-art reveal" aria-hidden="true">
+          <img src="assets/img/gecko.svg" alt="" width="320" height="320" loading="lazy">
+        </div>
+        <div class="story-copy">
+          <div class="section-head section-head-left reveal">
+            <p class="eyebrow">Feito no balcão</p>
+            <h2 id="story-title">Nasceu dentro de lojas de verdade</h2>
+            <p class="lead">O transCr8 não foi desenhado numa sala de reunião. Ele roda todos os dias em lojas de moda e espaços de recreação infantil, e cada recurso existe porque alguém no caixa precisou dele.</p>
+          </div>
+          <div class="values">
+            <div class="value reveal"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><h3>Sempre evoluindo</h3><p>Melhorias entram toda semana, sem reinstalar nada e sem parar a loja.</p></div>
+            <div class="value reveal"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg><h3>Suporte de quem faz</h3><p>Você fala direto com quem desenvolve o sistema, não com um roteiro de atendimento.</p></div>
+            <div class="value reveal"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg><h3>Dados protegidos</h3><p>Acesso por usuário e permissão, conexões criptografadas e registro de cada acesso, de acordo com a LGPD.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Implantação ============================== -->
+    <section class="section" id="implantacao" aria-labelledby="impl-title">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="eyebrow">Implantação</p>
+          <h2 id="impl-title">Da primeira conversa à primeira venda</h2>
+          <p class="lead">A gente cuida da parte chata para a sua equipe só aprender a vender no sistema novo.</p>
+        </div>
+        <ol class="steps">
+          <li class="step reveal"><span class="step-n">1</span><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg><h3>Conversa</h3><p>Entendemos como a sua loja funciona hoje: caixa, estoque, notas e o que mais incomoda.</p></li>
+          <li class="step reveal"><span class="step-n">2</span><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg><h3>Configuração</h3><p>Cadastramos lojas e usuários, importamos produtos e clientes, instalamos certificado e impressoras.</p></li>
+          <li class="step reveal"><span class="step-n">3</span><svg class="ic" aria-hidden="true"><use href="#i-cap"/></svg><h3>Treinamento</h3><p>No balcão, com a sua equipe, acompanhando os primeiros dias de venda.</p></li>
+          <li class="step reveal"><span class="step-n">4</span><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><h3>Acompanhamento</h3><p>Suporte direto e ajustes conforme a loja cresce: nova unidade, novo caixa, nova regra.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================== Dúvidas ============================== -->
+    <section class="section section-alt" id="duvidas" aria-labelledby="faq-title">
+      <div class="container faq-wrap">
+        <div class="section-head section-head-left reveal">
+          <p class="eyebrow">Dúvidas</p>
+          <h2 id="faq-title">Perguntas frequentes</h2>
+          <p class="lead">Não achou a sua? <a href="#contato">Pergunte direto pra gente.</a></p>
+        </div>
+        <div class="faq">
+          <details class="reveal">
+            <summary>Preciso instalar alguma coisa?</summary>
+            <p>O sistema roda no navegador, em qualquer computador, tablet ou celular. Nos caixas que imprimem cupom e etiqueta, instalamos um pequeno programa que conversa com a impressora — a gente faz isso na implantação.</p>
+          </details>
+          <details class="reveal">
+            <summary>E se a internet da loja cair?</summary>
+            <p>A NFC-e tem contingência off-line: a venda não para, o cupom sai impresso e a nota é transmitida para a SEFAZ assim que a conexão volta.</p>
+          </details>
+          <details class="reveal">
+            <summary>Serve para mais de uma loja?</summary>
+            <p>Sim, foi feito para isso. Clientes e produtos são compartilhados pela rede; estoque, caixa e notas ficam separados por loja; e o relatório administrativo mostra todas juntas.</p>
+          </details>
+          <details class="reveal">
+            <summary>Consigo trazer meus produtos e clientes do sistema atual?</summary>
+            <p>Sim. Importamos a partir de planilhas ou de exportações do seu sistema atual durante a implantação.</p>
+          </details>
+          <details class="reveal">
+            <summary>Emite nota de serviço para a recreação?</summary>
+            <p>Sim, a NFS-e sai pela integração com o Omie, junto com a ordem de serviço do atendimento.</p>
+          </details>
+          <details class="reveal">
+            <summary>Quanto custa?</summary>
+            <p>Depende do número de lojas, de caixas e dos módulos que você vai usar. Conte um pouco sobre a sua operação e enviamos uma proposta.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== Contato ============================== -->
+    <section class="section section-dark contact" id="contato" aria-labelledby="contato-title">
+      <div class="container contact-grid">
+        <div class="contact-copy reveal">
+          <p class="eyebrow eyebrow-dark">Contato</p>
+          <h2 id="contato-title">Vamos ver o transCr8 funcionando na sua loja?</h2>
+          <p class="lead">Conte como é a sua operação e marcamos uma demonstração com o seu caso — sem compromisso.</p>
+          <ul class="contact-next">
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Conversa direta com quem desenvolve o sistema</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Demonstração on-line ou na sua loja</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Proposta de acordo com o número de lojas</li>
+          </ul>
+          <p class="contact-mail">Prefere e-mail? <a href="mailto:contato@mikamihub.com">contato@mikamihub.com</a></p>
+        </div>
+
+        <form class="contact-form reveal" id="contact-form" action="contato.php" method="post" novalidate>
+          <div class="field-row">
+            <label class="field">
+              <span>Nome</span>
+              <input name="nome" type="text" autocomplete="name" required maxlength="100">
+            </label>
+            <label class="field">
+              <span>Empresa <small>(opcional)</small></span>
+              <input name="empresa" type="text" autocomplete="organization" maxlength="100">
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>E-mail</span>
+              <input name="email" type="email" autocomplete="email" required maxlength="254">
+            </label>
+            <label class="field">
+              <span>WhatsApp / telefone <small>(opcional)</small></span>
+              <input name="telefone" type="tel" autocomplete="tel" maxlength="30" pattern="[0-9+().\s\-]{8,30}" inputmode="tel">
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>Tipo de loja</span>
+              <select name="segmento" required>
+                <option value="" disabled selected>Escolha…</option>
+                <option>Varejo de moda e acessórios</option>
+                <option>Outro tipo de varejo</option>
+                <option>Recreação infantil</option>
+                <option>Outro</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Quantas lojas?</span>
+              <select name="lojas" required>
+                <option value="" disabled selected>Escolha…</option>
+                <option>1 loja</option>
+                <option>2 a 5 lojas</option>
+                <option>6 ou mais lojas</option>
+                <option>Ainda vou abrir</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>Mensagem</span>
+            <textarea name="mensagem" rows="4" required maxlength="5000" placeholder="Como a loja funciona hoje e o que você gostaria de resolver."></textarea>
+          </label>
+          <!-- Campo isca contra robôs: fica invisível para pessoas -->
+          <label class="hp" aria-hidden="true">Não preencha<input name="hp_extra" type="text" tabindex="-1" autocomplete="off"></label>
+          <div class="form-foot">
+            <button class="btn btn-primary btn-lg" type="submit"><span class="btn-label">Enviar mensagem</span><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            <p class="form-status" role="status" aria-live="polite"></p>
+          </div>
+          <p class="form-note">Usamos seus dados só para responder a esta mensagem.</p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="#topo" aria-label="transCr8 — voltar ao topo">
+          <img class="brand-mark" src="assets/img/gecko.svg" alt="" width="40" height="40" loading="lazy">
+          <span class="brand-name">trans<b>Cr8</b></span>
+        </a>
+        <p>Sistema de gestão para varejo e recreação infantil.</p>
+      </div>
+      <nav class="footer-links" aria-label="Rodapé">
+        <a href="#varejo">Varejo</a>
+        <a href="#recreacao">Recreação</a>
+        <a href="#gestao">Gestão</a>
+        <a href="#fiscal">Fiscal</a>
+        <a href="#integracoes">Integrações</a>
+        <a href="#contato">Contato</a>
+        <button type="button" class="link-btn" data-open-login>Entrar no sistema</button>
+      </nav>
+      <p class="footer-legal">© <span data-year>2026</span> transCr8 · Um produto <a href="https://mikamihub.com/" rel="noopener">Mikami Hub</a></p>
+    </div>
+  </footer>
+
+  <!-- Entrar: cada loja acessa pelo próprio endereço (<loja>.tcr8.co) -->
+  <dialog class="login-dialog" id="login-dialog" aria-labelledby="login-title">
+    <form method="dialog" class="login-form" id="login-form" novalidate>
+      <button class="dialog-close" type="submit" value="cancel" aria-label="Fechar" formnovalidate><svg class="ic" aria-hidden="true"><use href="#i-close"/></svg></button>
+      <img src="assets/img/gecko.svg" alt="" width="56" height="56">
+      <h2 id="login-title">Entrar no sistema</h2>
+      <p>Cada loja tem o seu endereço. Digite o da sua para ir à tela de login.</p>
+      <label class="field">
+        <span>Endereço da loja</span>
+        <span class="addr">
+          <span class="addr-pre">https://</span>
+          <input name="loja" type="text" required autocomplete="off" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9\-]{2,40}" placeholder="minhaloja" aria-describedby="login-hint">
+          <span class="addr-suf">.tcr8.co</span>
+        </span>
+      </label>
+      <p class="login-hint" id="login-hint">Não sabe o endereço? Peça para o administrador da sua loja.</p>
+      <button class="btn btn-primary btn-block" type="submit" value="go">Ir para a minha loja <svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+    </form>
+  </dialog>
+</body>
+</html>
