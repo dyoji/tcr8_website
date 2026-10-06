@@ -1,4 +1,4 @@
-/* transCr8 — demonstração animada do topo (caixa e recreação se alternando).
+/* tCr8 — demonstração animada do topo (caixa e recreação se alternando).
    O HTML já traz o estado final de cada cena; sem JavaScript ou com "reduzir movimento", fica parado nele. */
 (() => {
   const mock = document.querySelector('.mock');
@@ -76,7 +76,7 @@
     itemTpl.forEach((tpl, i) => {
       at(500 + i * 800, () => {
         const li = tpl.cloneNode(true);
-        li.style.animation = 'slide-in .45s ease both';
+        li.style.animation = 'entra .45s cubic-bezier(.2, .7, .2, 1) both';
         items.appendChild(li);
         countTo(total, acc, acc + prices[i], brl);
         acc += prices[i];
@@ -85,7 +85,7 @@
     at(3000, () => pays[0].classList.add('is-on'));
     at(3500, () => setToast(toast, toastText, 'Transmitindo NFC-e para a SEFAZ…', true));
     at(5000, () => {
-      setToast(toast, toastText, 'NFC-e autorizada · Protocolo 135 2610 0042 118');
+      setToast(toast, toastText, 'NFC-e autorizada · protocolo 135 2610 0042 118');
       centro.classList.add('is-changed');
       centro.querySelector('b').textContent = '2';
       centro.querySelector('.bar i').style.setProperty('--v', '.2');

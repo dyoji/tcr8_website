@@ -1,6 +1,6 @@
 <?php
 /**
- * transCr8 — envio do formulário de contato por SMTP.
+ * tCr8 — envio do formulário de contato por SMTP.
  *
  * As credenciais NÃO ficam aqui: são lidas de um arquivo fora da pasta pública
  * (por padrão, ../config-contato-tcr8.php). Modelo em contato.config.example.php.
@@ -42,8 +42,8 @@ function responder(bool $ok, string $mensagem, int $status = 200): never
         header('Content-Type: text/html; charset=utf-8');
         $texto = htmlspecialchars($mensagem, ENT_QUOTES, 'UTF-8');
         echo "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-            . "<title>Contato — transCr8</title><body style=\"font-family:system-ui,sans-serif;background:#0c1810;color:#eaf3e5;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px\">"
-            . "<main style=\"max-width:480px;text-align:center\"><p style=\"font-size:1.2rem\">{$texto}</p><p><a href=\"/#contato\" style=\"color:#a4e45a\">Voltar ao site</a></p></main></body></html>";
+            . "<title>Contato — tCr8</title><body style=\"font-family:ui-monospace,Menlo,Consolas,monospace;background:#0a0a0a;color:#f2f3ee;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px\">"
+            . "<main style=\"max-width:480px;text-align:center\"><p style=\"font-size:1.2rem\">{$texto}</p><p><a href=\"/#contato\" style=\"color:#c8f031\">Voltar ao site</a></p></main></body></html>";
     }
     exit;
 }
@@ -124,11 +124,11 @@ $corpo = implode("\n", [
 try {
     smtpEnviar($config['smtp'], [
         'from' => $config['from'],
-        'from_name' => $config['from_name'] ?? 'Site transCr8',
+        'from_name' => $config['from_name'] ?? 'Site tCr8',
         'to' => $config['to'],
         'reply_to' => $email,
         'reply_to_name' => $nome,
-        'subject' => "[transCr8] {$segmento} · {$lojas} — {$nome}",
+        'subject' => "[tCr8] {$segmento} · {$lojas} — {$nome}",
         'body' => $corpo,
     ]);
 } catch (Throwable $e) {

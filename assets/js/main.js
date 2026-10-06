@@ -1,4 +1,4 @@
-/* transCr8 — interações gerais do site */
+/* tCr8 — interações gerais do site */
 (() => {
   const CONTATO_EMAIL = 'contato@mikamihub.com';
   const LOGIN_DOMINIO = 'tcr8.co';
@@ -17,6 +17,7 @@
     toggle.setAttribute('aria-expanded', String(open));
     toggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
     menu.classList.toggle('is-open', open);
+    header.classList.toggle('menu-open', open);
   };
   toggle.addEventListener('click', () => setMenu(toggle.getAttribute('aria-expanded') !== 'true'));
   menu.addEventListener('click', (e) => { if (e.target.closest('a, button')) setMenu(false); });
@@ -132,6 +133,7 @@
     if (!form.reportValidity()) return;
 
     button.disabled = true;
+    button.classList.add('is-loading');
     label.textContent = 'Enviando…';
     setStatus('');
     try {
@@ -152,6 +154,7 @@
       setStatus(fallback, true);
     } finally {
       button.disabled = false;
+      button.classList.remove('is-loading');
       label.textContent = defaultLabel;
     }
   });

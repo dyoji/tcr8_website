@@ -6,7 +6,7 @@
  * e preencha os dados da conta que envia os e-mails. Esse arquivo real nunca deve ir para o git.
  *
  * Os valores abaixo usam a conta de envio que já existe na Mikami Hub (Hostinger); se o site
- * passar a ter um e-mail próprio do transCr8, é só trocar aqui.
+ * passar a ter um e-mail próprio da tCr8, é só trocar aqui.
  */
 return [
     'smtp' => [
@@ -17,6 +17,6 @@ return [
         'pass' => 'COLOQUE_A_SENHA_AQUI',
     ],
     'from' => 'nao-responda@mikamihub.com',
-    'from_name' => 'Site transCr8',
+    'from_name' => 'Site tCr8',
     'to' => 'contato@mikamihub.com', // caixa que recebe as mensagens do site
 ];

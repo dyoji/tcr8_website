@@ -1,6 +1,6 @@
-# transCr8 — site institucional
+# tCr8 — site institucional
 
-Site do transCr8 (tcr8), o sistema de gestão para lojas de varejo e espaços de recreação infantil: caixa, estoque de várias lojas, clientes, NFC-e e NF-e, relatórios e integrações. Endereço previsto: **https://tcr8.co/**.
+Site da tCr8 (transcreate), o sistema de gestão para lojas de varejo e espaços de recreação infantil: caixa, estoque de várias lojas, clientes, NFC-e e NF-e, relatórios e integrações. Endereço previsto: **https://tcr8.co/**.
 
 As páginas são HTML, CSS e JavaScript puros (sem etapa de build); só o envio do formulário de contato usa PHP.
 
@@ -11,14 +11,25 @@ index.html                   Página única com todas as seções
 contato.php                  Recebe o formulário e envia o e-mail por SMTP
 contato.config.example.php   Modelo da configuração do SMTP (a real fica fora do git)
 favicon.ico
-assets/css/style.css         Estilos (cores e fontes ficam nas variáveis do topo, em :root)
+assets/css/style.css         Estilos (cores e fonte da marca nas variáveis do topo, em :root)
+assets/js/pixel.js           Desenho dos blocos da marca e o loop do 8 — cópia de brands/tcr8/pixel.js
 assets/js/main.js            Menu mobile, animações de entrada, "Entrar", envio do formulário
 assets/js/demo.js            Demonstração animada do topo (caixa ↔ recreação)
-assets/img/gecko.svg         A lagartixa da marca (a mesma do sistema, tcr8_sys/assets/img/tcr8_icon.svg)
-assets/img/favicon-*.png     Ícones da aba (os mesmos do sistema)
+assets/img/favicon.svg       O 8 sobre preto — cópia de brands/tcr8/files/img/favicon.svg
+assets/img/favicon-32.png, apple-touch-icon.png   O mesmo favicon em PNG
 assets/img/og-tcr8.png       Imagem de compartilhamento 1200×630 (WhatsApp, LinkedIn etc.)
 robots.txt, sitemap.xml
 ```
+
+## Marca
+
+O site segue a identidade **Pixel ∞** do Brand Resources (`sys/brands/tcr8`):
+
+- **Logo**: blocos numa grade 3×5. O símbolo é o 8 (em pé) ou o infinito (deitado); a palavra é `tCr8` em blocos. Tudo é desenhado pelo `pixel.js` a partir de `<span class="px" data-px="8|inf|tCr8" data-tom="preto|claro|limao|led" data-loop="1">`. Se a marca mudar o desenho, basta copiar o `pixel.js` novo para `assets/js/`.
+- **Cores**: Preto `#0A0A0A`, Limão `#C8F031`, Névoa `#E9EAE4`, Giz `#F2F3EE`, Grafite `#4D5147` e os quatro tons do rastro do loop. O limão é o "bloco aceso": um acento por área (o número da seção, o botão principal, o carimbo da nota), nunca fundo de página.
+- **Fonte**: só Geist Mono (400, 500, 600, 800), pelo Google Fonts.
+- **Movimento**: o cursor percorrendo o 8 aparece no infinito da seção "Feito no balcão" e como indicador de carregamento (aviso da NFC-e na demonstração e botão de enviar o formulário).
+- **Assinatura**: "transcreate · criações transparentes" e "tCr8 Systems by Daniel", como no Brand Resources.
 
 ## Seções
 
@@ -49,7 +60,7 @@ O formulário envia para `contato.php`, que manda um e-mail por SMTP:
 - **De:** `nao-responda@mikamihub.com` (a mesma conta de envio do site da Mikami Hub)
 - **Para:** `contato@mikamihub.com`
 - **Responder para:** o e-mail do visitante — é só clicar em "Responder"
-- **Assunto:** `[transCr8] <tipo de loja> · <quantas lojas> — <nome>`
+- **Assunto:** `[tCr8] <tipo de loja> · <quantas lojas> — <nome>`
 
 Proteções: campo isca contra robôs, validação dos campos, bloqueio de injeção de cabeçalhos e limite de 5 envios por IP e 60 no total por hora.
 
@@ -78,7 +89,7 @@ Cada loja acessa o sistema pelo próprio endereço (`<loja>.tcr8.co`). O botão 
 - **Domínio**: o site assume `https://tcr8.co/` em `index.html` (canonical, Open Graph e JSON-LD), `robots.txt` e `sitemap.xml`.
 - **Textos**: todos em `index.html`, organizados por seção.
 - **Opções do formulário**: as listas dos `<select>` "Tipo de loja" e "Quantas lojas?" em `index.html` precisam ser iguais às constantes `SEGMENTOS` e `LOJAS` de `contato.php`.
-- **Cores e fontes**: variáveis em `:root` no início de `assets/css/style.css` (`--brand` é o verde da lagartixa, `--yellow` o amarelo).
+- **Cores e fonte**: variáveis em `:root` no início de `assets/css/style.css`, com os nomes da marca (`--limao`, `--bg` = Giz, `--bg-alt` = Névoa, `--ink` = Preto, `--ink-2` = Grafite).
 - **Logos de clientes / depoimentos**: ainda não há; se quiser mostrar as lojas que usam o sistema, a seção "Feito no balcão" é o lugar (com autorização de cada uma).
 
 ## Publicar / atualizar
