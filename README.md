@@ -16,7 +16,8 @@ assets/js/pixel.js           Desenho dos blocos da marca e o loop do 8 — cópi
 assets/js/main.js            Menu mobile, animações de entrada, "Entrar", envio do formulário
 assets/js/demo.js            Demonstração animada do topo (caixa ↔ recreação)
 assets/img/favicon.svg       O 8 sobre preto — cópia de brands/tcr8/files/img/favicon.svg
-assets/img/assinatura_*.svg  Assinatura horizontal (∞ + nome) — cópia de brands/tcr8/files/svg/
+assets/img/palavra_preto.svg O nome em tipo — cópia de brands/tcr8/files/svg/ (o rodapé junta com o ∞ animado)
+assets/img/assinatura_*.svg  Assinatura horizontal (∞ + nome) — cópia de brands/tcr8/files/svg/ (fonte da imagem og)
 assets/img/favicon-32.png, apple-touch-icon.png   O mesmo favicon em PNG
 assets/img/og-tcr8.png       Imagem de compartilhamento 1200×630 (WhatsApp, LinkedIn etc.)
 robots.txt, sitemap.xml
@@ -26,7 +27,7 @@ robots.txt, sitemap.xml
 
 O site segue a identidade **Pixel ∞** do Brand Resources (`sys/brands/tcr8`):
 
-- **Logo**: o símbolo em blocos numa grade 3×5 — o 8 (em pé) ou o infinito (deitado), desenhado pelo `pixel.js` a partir de `<span class="px" data-px="8|inf" data-tom="preto|claro|limao|led" data-loop="1">`. O nome `tCr8` é só tipo (Geist Mono ExtraBold), nunca em blocos. No rodapé vai a assinatura horizontal (∞ + nome), `assets/img/assinatura_preto.svg`, cópia de `brands/tcr8/files/svg/`. Se a marca mudar, basta copiar o `pixel.js` e os SVGs novos para cá.
+- **Logo**: o símbolo em blocos numa grade 3×5 — o 8 (em pé) ou o infinito (deitado), desenhado pelo `pixel.js` a partir de `<span class="px" data-px="8|inf" data-tom="preto|claro|limao|led" data-loop="1">`. O nome `tCr8` é só tipo (Geist Mono ExtraBold), nunca em blocos. Os ícones pequenos são animados com o loop do `pixel.js` (o mesmo dos GIFs da marca, desenhado ao vivo): o 8 no ladrilho preto do cabeçalho e da janela Entrar, e no rodapé a assinatura horizontal montada com o ∞ vivo + `palavra_preto.svg`, nas medidas do `assinatura_preto.svg`. Se a marca mudar, basta copiar o `pixel.js` e os SVGs novos para cá.
 - **Cores**: Preto `#0A0A0A`, Limão `#C8F031`, Névoa `#E9EAE4`, Giz `#F2F3EE`, Grafite `#4D5147` e os quatro tons do rastro do loop. O limão é o "bloco aceso": um acento por área (o número da seção, o botão principal, o carimbo da nota), nunca fundo de página.
 - **Fonte**: só Geist Mono (400, 500, 600, 800), pelo Google Fonts.
 - **Movimento**: o cursor percorrendo o 8 aparece no infinito da seção "Feito no balcão" e como indicador de carregamento (aviso da NFC-e na demonstração e botão de enviar o formulário).
