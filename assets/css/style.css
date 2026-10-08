@@ -475,7 +475,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- Rodapé ---------- */
 .site-footer { padding: 40px 0 44px; border-top: 1px solid var(--line); }
 .footer-grid { display: grid; grid-template-columns: 1fr auto; gap: 28px 40px; align-items: start; }
-.footer-word { width: 96px; }
+.footer-word { width: 150px; height: auto; }
 .footer-brand .rotulo { margin-top: 16px; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: flex-end; font-size: 13.5px; }
 .footer-links a, .footer-links .link-btn { color: var(--ink-2); text-decoration: none; }
