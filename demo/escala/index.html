@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escala · Gestor</title>
+  <meta name="description" content="Demo de escala semanal de equipe — tCr8">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="css/base.css?v=3">
+  <link rel="stylesheet" href="css/gestor.css?v=3">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./" id="brand"><span class="brand-name">Escala</span><span class="brand-tag">demo tCr8</span></a>
+    <div class="seg" id="stores" role="group" aria-label="Loja"></div>
+    <div class="weeknav">
+      <button class="btn icon ghost" id="prev" aria-label="Semana anterior"></button>
+      <button class="btn ghost weeklabel" id="weekLabel"></button>
+      <button class="btn icon ghost" id="next" aria-label="Próxima semana"></button>
+      <button class="btn sm" id="today">Hoje</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn regime" id="btnRegime"></button>
+    <button class="btn ghost" id="btnRequests"></button>
+    <a class="btn ghost" id="lnkMural" target="_blank" rel="noopener"></a>
+    <a class="btn ghost" id="lnkEu" target="_blank" rel="noopener"></a>
+    <button class="btn icon ghost" id="btnSettings" aria-label="Configurações"></button>
+    <span class="live" id="live"><i></i><span>ao vivo</span></span>
+  </header>
+
+  <section class="bar">
+    <div class="pubstatus" id="pubStatus"></div>
+    <div class="actions">
+      <button class="btn" id="btnAuto"></button>
+      <button class="btn" id="btnCopy"></button>
+      <button class="btn icon" id="btnMore" aria-label="Mais ações"></button>
+      <button class="btn primary" id="btnPublish"></button>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <main class="layout">
+    <div class="board">
+      <div class="gridwrap"><div class="grid" id="grid"></div></div>
+      <section class="dayview" id="dayView"></section>
+    </div>
+    <aside class="issues" id="issues"></aside>
+  </main>
+
+  <div id="pop" class="popover" role="menu"></div>
+  <div id="toasts"></div>
+
+  <script src="js/core.js?v=3"></script>
+  <script src="js/auto.js?v=3"></script>
+  <script src="js/seed.js?v=3"></script>
+  <script src="js/routes.js?v=3"></script>
+  <script src="js/local.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/gestor.js?v=3"></script>
+</body>
+</html>

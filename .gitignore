@@ -3,3 +3,6 @@ config-contato-tcr8.php
 config-contato*.php
 !contato.config.example.php
 .claude/
+
+# dados do demo de escala (gerados pelo api.php no servidor)
+demo/escala/.data/

@@ -21,7 +21,12 @@ assets/img/assinatura_*.svg  Assinatura horizontal (∞ + nome) — cópia de br
 assets/img/favicon-32.png, apple-touch-icon.png   O mesmo favicon em PNG
 assets/img/og-tcr8.png       Imagem de compartilhamento 1200×630 (WhatsApp, LinkedIn etc.)
 robots.txt, sitemap.xml
+demo/escala/                 Demo de escala (tcr8.co/demo/escala) — cópia do repo demo_escala, não editar aqui
 ```
+
+### Demo de escala (`demo/escala`)
+
+Gerado a partir de `sys/demo_escala` com `npm run site` (copia `public/` para cá); edite lá e copie de novo. Roda sem Node: a lógica fica no navegador e o `api.php` só guarda o JSON em `demo/escala/.data/` (fora do git). Essa pasta precisa ser gravável pelo PHP do site no servidor. Cada cliente pode ter a sua cópia com `?sala=nome`; os dados se renovam sozinhos toda semana.
 
 ## Marca
 

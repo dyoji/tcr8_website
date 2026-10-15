@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escala · Mural</title>
+  <meta name="description" content="Mural ao vivo da escala da semana — para a TV da loja">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/base.css?v=3">
+  <link rel="stylesheet" href="css/mural.css?v=3">
+</head>
+<body>
+  <header class="mh">
+    <div class="mbrand" id="brand">
+      <div><div class="store" id="store">Escala</div><div class="sub" id="sub">carregando…</div></div>
+    </div>
+    <div class="mh-right">
+      <span class="sim hidden" id="sim">simulação</span>
+      <span class="live" id="live"><i></i><span>ao vivo</span></span>
+      <div class="clock"><span class="mono" id="clock">--:--</span><small id="date"></small></div>
+    </div>
+  </header>
+  <main class="mm" id="main">
+    <section class="col-now" id="now"></section>
+    <section class="col-week" id="week"></section>
+  </main>
+  <footer class="mf"><div class="ticker"><div class="track" id="ticker"></div></div></footer>
+  <div class="banner" id="banner" role="status" aria-live="polite"></div>
+
+  <script src="js/core.js?v=3"></script>
+  <script src="js/auto.js?v=3"></script>
+  <script src="js/seed.js?v=3"></script>
+  <script src="js/routes.js?v=3"></script>
+  <script src="js/local.js?v=3"></script>
+  <script src="js/ui.js?v=3"></script>
+  <script src="js/mural.js?v=3"></script>
+</body>
+</html>
