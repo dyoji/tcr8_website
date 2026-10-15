@@ -82,7 +82,7 @@
     let seq = 0;
     const newId = () => 'sh' + ++seq;
     const db = {
-      version: 1, seq: 0, created_at: now.toISOString(), seed_week: W,
+      version: 1, schema: 3, seq: 0, created_at: now.toISOString(), seed_week: W,
       company: { name: 'Demo tCr8' },
       settings: { regime: 'clt', rules: { art386: true, compensacao: true, noturno: true, feriado: true }, labor_target_pct: 14 },
       roles: clone(ROLES), stores: clone(STORES), employees: clone(EMPLOYEES),

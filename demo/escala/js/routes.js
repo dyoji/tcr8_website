@@ -21,8 +21,10 @@
   const same = (a, b) => FIELDS.every((f) => nn(a[f]) === nn(b[f]));
 
   // O demo se renova sozinho quando a semana em que foi gerado já passou (sempre abre com a semana atual cheia).
+  // Sobe quando o formato dos dados muda: sala antiga se refaz sozinha em vez de abrir pela metade.
+  const SCHEMA = 3;
   function isStale(db) {
-    return !db || !Array.isArray(db.stores) || !Array.isArray(db.shifts) || !Array.isArray(db.employees) || !db.publications
+    return !db || (db.schema || 0) < SCHEMA || !Array.isArray(db.stores) || !Array.isArray(db.shifts) || !Array.isArray(db.employees) || !db.publications
       || (db.seed_week && C.weekStart(C.todayISO()) > db.seed_week);
   }
 
