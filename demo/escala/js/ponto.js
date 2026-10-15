@@ -47,6 +47,15 @@
     nodes.push(todayCard(it, now));
     if (P.receipt) nodes.push(receiptCard(P.receipt));
     nodes.push(scheduleCard(v, now));
+    // transparência: a pessoa vê o mesmo comparecimento que a loja usa para escalar (LGPD art. 9º)
+    const hs = v.historico;
+    if (hs && hs.ok + hs.falta + hs.just) {
+      const faltas = hs.list.filter((x) => x.out !== 'presente');
+      nodes.push(h('div', { class: 'card' }, h('h2', null, 'Seu comparecimento'),
+        h('div', { class: 'pay' }, h('span', null, 'Turnos aceitos nos últimos 6 meses'), h('b', null, hs.ok + ' de ' + (hs.ok + hs.falta))),
+        faltas.length ? h('div', { class: 'plist' }, faltas.map((x) => h('span', null, dl(x.date) + ' · ', h('b', null, x.out === 'falta' ? 'falta' : 'justificada')))) : h('p', { class: 'note' }, 'Nenhuma falta registrada.'),
+        h('p', { class: 'note' }, 'Recusar uma convocação não conta. A loja usa isso só para organizar a escala. Se algo estiver errado (você veio e o ponto não registrou, ou teve um motivo), fale com a loja para corrigir.')));
+    }
     const total = v.items.reduce((a, i) => a + i.pay, 0);
     if (total > 0) nodes.push(h('div', { class: 'card' }, h('h2', null, 'A receber até agora'),
       h('div', { class: 'pay' }, h('span', null, 'Horas + 13º e férias + 1/3 proporcionais'), h('b', null, C.money2(total * (1 + v.reflexos)))),

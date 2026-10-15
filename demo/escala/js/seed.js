@@ -216,6 +216,76 @@
     const diego = freela('f2', 'KID', 'Diego Martins', 'mon', '853902174', 14);
     if (C.addDays(W, 6) > today) convoca(diego, turno(diego, C.addDays(W, 6), 490), 'aceito', sent);
 
+    // aptidões: em que outros cargos cada um pode trabalhar
+    const APT = { e2: ['cx', 'ger'], e4: ['cx'], e7: ['ven'], e10: ['cx'], e13: ['ven'], e14: ['mon', 'rec'], e16: ['rec'], e18: ['mon'] };
+    Object.keys(APT).forEach((id) => { emp(id).apt = APT[id]; });
+    ana.apt = ['cx']; diego.apt = ['rec'];
+
+    // banco de freelas com 6 semanas de histórico — o comparecimento muda conforme o dia da semana
+    function pastShift(e, date, len) {
+      const sw = C.staffWindow(db.stores.find((x) => x.id === e.store_id), date);
+      if (!sw) return null;
+      const wk = C.maxWorkedIn(len), br = C.breakFor(wk);
+      const sh = { id: newId(), store_id: e.store_id, employee_id: e.id, date, start: C.fromMin(sw.end - wk - br), end: C.fromMin(sw.end), break_min: br, role_id: e.role_id };
+      db.shifts.push(sh);
+      const pub = db.publications[e.store_id + '|' + C.weekStart(date)];
+      if (pub) pub.shifts.push(clone(sh));
+      return sh;
+    }
+    const at = (date, m, salt) => date + 'T' + C.fromMin(m) + ':' + C.pad(Math.floor(C.rand(salt) * 60));
+    function history(e, plan, extra) {
+      for (let k = 6; k >= 1; k--) {
+        const ws = C.addDays(W, -7 * k);
+        for (const p of plan) {
+          const date = C.addDays(ws, p.d === 0 ? 6 : p.d - 1);
+          if (C.rand(e.id + date + 'pula') < 0.2) continue; // nem toda semana é chamado
+          const sh = pastShift(e, date, p.len || 375);
+          if (!sh) continue;
+          const sentAt = stamp(C.addDays(date, -4), '18:10');
+          const came = C.rand(e.id + date) < p.p;
+          const [a, b] = C.span(sh);
+          const late = came && C.rand(e.id + date + 'atraso') < 0.2 ? 6 + Math.floor(C.rand(e.id + date + 'min') * 12) : 0;
+          const punches = [];
+          if (came) {
+            punches.push(Object.assign({ type: 'entrada', at: at(date, a - 4 + late, e.id + date + 'e'), nsr: ++db.nsr }, late ? { late } : {}));
+            if (sh.break_min) {
+              punches.push({ type: 'intervalo_ini', at: at(date, a + 180, e.id + date + 'i'), nsr: ++db.nsr });
+              punches.push({ type: 'intervalo_fim', at: at(date, a + 180 + sh.break_min + 1, e.id + date + 'f'), nsr: ++db.nsr });
+            }
+            punches.push({ type: 'saida', at: at(date, b + 2, e.id + date + 's'), nsr: ++db.nsr });
+          }
+          db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: sentAt, status: 'aceito', answered_at: sentAt, punches });
+        }
+      }
+      (extra || []).forEach((x) => {
+        const date = C.addDays(W, x.week * 7 + (x.d === 0 ? 6 : x.d - 1));
+        const sh = pastShift(e, date, 375); if (!sh) return;
+        const c = { id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: stamp(C.addDays(date, -4), '18:10'), status: 'aceito', answered_at: stamp(C.addDays(date, -4), '19:02'), punches: [] };
+        if (x.kind === 'recusa') { c.status = 'recusado'; applyBoth(sh, { employee_id: null }); }
+        if (x.kind === 'justificada') { c.attendance = 'justificada'; c.attendance_reason = 'atestado'; c.attendance_by = stamp(date, '21:00'); }
+        db.convocations.push(c);
+      });
+    }
+    const roster = (id, store, name, role, apt, cpf9, rate, withLink) => { const e = freela(id, store, name, role, cpf9, rate); e.apt = apt; if (!withLink) e.link = null; return e; };
+    history(ana, [{ d: 6, p: 1, len: 490 }, { d: 5, p: 0.9 }]);
+    history(diego, [{ d: 6, p: 0.9, len: 490 }, { d: 0, p: 0.85 }]);
+    const bianca = roster('f3', 'SHO', 'Bianca Rocha', 'ven', ['cx'], '418273650', 15);
+    history(bianca, [{ d: 6, p: 0.95, len: 490 }, { d: 0, p: 0.3 }, { d: 3, p: 1 }]);
+    const julia = roster('f4', 'SHO', 'Júlia Andrade', 'ven', ['est'], '629184037', 14, true);
+    history(julia, [{ d: 6, p: 0.25, len: 490 }, { d: 5, p: 0.95 }]);
+    const rafael = roster('f5', 'SHO', 'Rafael Lima', 'cx', ['ven'], '730295184', 16);
+    history(rafael, [{ d: 6, p: 1, len: 490 }, { d: 0, p: 1 }, { d: 2, p: 1 }]);
+    roster('f6', 'SHO', 'Thiago Nunes', 'est', [], '841306295', 13); // novo, sem histórico
+    const larissa = roster('f7', 'SHO', 'Larissa Gomes', 'ven', [], '952417306', 15);
+    history(larissa, [{ d: 6, p: 0.95, len: 490 }, { d: 0, p: 0.9 }], [{ week: -3, d: 6, kind: 'recusa' }, { week: -2, d: 0, kind: 'justificada' }]);
+    const patricia = roster('f8', 'KID', 'Patrícia Souza', 'mon', ['rec'], '163528417', 14, true);
+    history(patricia, [{ d: 0, p: 0.25, len: 490 }, { d: 6, p: 0.85, len: 490 }]);
+    const bruno = roster('f9', 'KID', 'Bruno Teixeira', 'rec', ['mon'], '274639528', 14);
+    history(bruno, [{ d: 6, p: 1, len: 490 }, { d: 0, p: 1, len: 490 }]);
+    // convocados desta semana com histórico ruim naquele dia: o painel avisa
+    if (C.addDays(W, 5) > today) convoca(julia, turno(julia, C.addDays(W, 5), 490), 'aceito', sent);
+    if (C.addDays(W, 6) > today) convoca(patricia, turno(patricia, C.addDays(W, 6), 375), 'aceito', sent);
+
     // quem ainda não confirmou a leitura da semana atual
     ['e3', 'e7', 'e8', 'e12', 'e19', 'e20'].forEach((id) => { const r = db.receipts[emp(id).store_id + '|' + W]; if (r) delete r[id]; });
 

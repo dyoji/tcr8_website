@@ -96,9 +96,9 @@
       const made = [];
       for (const d of days) {
         let sh = d.shift_id && db.shifts.find((x) => x.id === d.shift_id && x.store_id === emp.store_id && !x.employee_id);
-        if (sh) patchEverywhere(sh.id, { employee_id: emp.id, role_id: emp.role_id });
+        if (sh) patchEverywhere(sh.id, { employee_id: emp.id, role_id: C.isApt(emp, sh.role_id) ? sh.role_id : emp.role_id });
         else {
-          sh = sanitizeShift({ date: d.date, start: d.start, end: d.end, break_min: d.break_min, note: d.note }, { id: newId(), store_id: emp.store_id, employee_id: emp.id, role_id: emp.role_id, break_min: 0 });
+          sh = sanitizeShift({ date: d.date, start: d.start, end: d.end, break_min: d.break_min, note: d.note }, { id: newId(), store_id: emp.store_id, employee_id: emp.id, role_id: d.role_id && C.isApt(emp, d.role_id) ? d.role_id : emp.role_id, break_min: 0 });
           if (d.break_min === undefined) sh.break_min = C.breakFor(C.worked(sh));
           db.shifts.push(sh);
           addPublished(sh);
@@ -109,6 +109,26 @@
         made.push({ conv: c, shift: sh });
       }
       return made;
+    }
+    function upsertFreela(store, it) {
+      const name = String(it.name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+      if (name.split(' ').length < 2) bad('Informe nome e sobrenome');
+      if (!C.cpfValid(it.cpf)) bad('CPF inválido');
+      const role = it.role_id || store.default_role;
+      if (!db.roles.some((r) => r.id === role)) bad('Função inválida');
+      const apt = Array.isArray(it.apt) ? it.apt.filter((r) => r !== role && db.roles.some((x) => x.id === r)) : null;
+      const cpfHash = C.sha256(C.cpfDigits(it.cpf));
+      let emp = db.employees.find((e) => e.store_id === store.id && e.cpf_hash === cpfHash);
+      const reused = !!emp;
+      const norm = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      if (emp && norm(emp.name) !== norm(name)) bad('CPF já cadastrado para ' + emp.name.split(' ')[0] + ' ' + emp.name.split(' ').slice(-1)[0][0] + '.');
+      if (emp) Object.assign(emp, { name, role_id: role, rate_hour: Math.max(0, Math.min(500, +it.rate_hour || emp.rate_hour || 0)), active: true }, apt ? { apt } : {});
+      else {
+        emp = { id: newId('f'), store_id: store.id, name, role_id: role, apt: apt || [], contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true,
+          rate_hour: Math.max(0, Math.min(500, +it.rate_hour || 0)), cpf_hash: cpfHash, cpf_mask: C.cpfMask(it.cpf), created_at: nowStamp() };
+        db.employees.push(emp);
+      }
+      return { emp, reused };
     }
     function lastDay(emp) {
       const dates = db.convocations.filter((c) => c.employee_id === emp.id && c.status !== 'recusado').map((c) => (db.shifts.find((x) => x.id === c.shift_id) || {}).date).filter(Boolean).sort();
@@ -143,6 +163,8 @@
         ok: true, now: nowStamp(), name: emp.name, cpf: emp.cpf_mask, role: role.name, rate_hour: emp.rate_hour || 0, reflexos: C.FREELA_REFLEXOS,
         store: { id: store.id, name: store.name, kind: store.kind }, company: db.company && db.company.name, valid_until: emp.link.valid_until,
         ponto: Object.assign({}, C.PONTO, db.settings.ponto), items,
+        // transparência (LGPD art. 9º): a pessoa vê o mesmo histórico que o gestor usa
+        historico: (() => { const a = C.freelaAttendance(db.convocations.filter((c) => c.employee_id === emp.id).map((c) => Object.assign({}, c, { shift: db.shifts.find((x) => x.id === c.shift_id) || null })), clock()); return { ok: a.ok, falta: a.falta, just: a.just, recusas: a.recusas, rate: a.rate, late: a.late, list: a.list.slice(0, 12) }; })(),
       };
     }
     const log = (store_id, msg) => { db.log.push({ at: nowStamp(), store_id, msg }); if (db.log.length > 200) db.log.splice(0, db.log.length - 200); };
@@ -330,7 +352,7 @@
           const s = db.shifts.find((x) => x.id === r.shift_id) || bad('O turno não existe mais');
           const to = r.type === 'pegar' ? r.employee_id : r.to_employee_id || null;
           const from = s.employee_id;
-          patchEverywhere(s.id, { employee_id: to, role_id: to ? empOf(to).role_id : s.role_id });
+          patchEverywhere(s.id, { employee_id: to, role_id: to && !C.isApt(empOf(to), s.role_id) ? empOf(to).role_id : s.role_id });
           ids = [s.id]; week = C.weekStart(s.date); published = !!db.publications[pubKey(r.store_id, week)];
           msg = r.type === 'pegar' ? firstName(to) + ' pegou o turno aberto de ' + C.DOW_SHORT[C.dow(s.date)] + ' ' + C.fmtDay(s.date)
             : firstName(from) + ' ⇄ ' + (to ? firstName(to) : 'turno aberto') + ' — ' + C.DOW_SHORT[C.dow(s.date)] + ' ' + C.fmtDay(s.date) + ' ' + s.start + '–' + s.end;
@@ -365,19 +387,8 @@
       // ---------------- freela intermitente (CLT art. 452-A): cadastro, convocação e link
       'POST /api/freelas': () => {
         const store = storeOf(b.store_id) || bad('Loja não existe');
-        const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
-        if (name.split(' ').length < 2) bad('Informe nome e sobrenome');
-        if (!C.cpfValid(b.cpf)) bad('CPF inválido');
-        if (!db.roles.some((r) => r.id === b.role_id)) bad('Função inválida');
-        const cpfHash = C.sha256(C.cpfDigits(b.cpf));
-        let emp = db.employees.find((e) => e.store_id === store.id && e.cpf_hash === cpfHash);
-        const reused = !!emp;
-        if (emp) Object.assign(emp, { name, role_id: b.role_id, rate_hour: Math.max(0, +b.rate_hour || emp.rate_hour || 0), active: true });
-        else {
-          emp = { id: newId('f'), store_id: store.id, name, role_id: b.role_id, contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true,
-            rate_hour: Math.max(0, Math.min(500, +b.rate_hour || 0)), cpf_hash: cpfHash, cpf_mask: C.cpfMask(b.cpf), created_at: nowStamp() };
-          db.employees.push(emp);
-        }
+        const { emp, reused } = upsertFreela(store, b);
+        const name = emp.name;
         const made = convocar(emp, b.days);
         setLink(emp, b.token, b.valid_until);
         const first = name.split(' ')[0];
@@ -386,6 +397,102 @@
         emit({ type: pubd ? 'published' : 'draft', store_id: store.id, week: made[0] ? C.weekStart(made[0].shift.date) : null, ids: made.map((x) => x.shift.id), msg: 'Convocação enviada para ' + first + ' — aguardando aceite' });
         return { employee_id: emp.id, valid_until: emp.link.valid_until, link_created_at: emp.link.created_at, convocations: made.map((x) => x.conv.id), reused };
       },
+      // cadastro no banco de freelas, sem convocar (um ou uma lista colada)
+      'POST /api/freelas/cadastro': () => {
+        const store = storeOf(b.store_id) || bad('Loja não existe');
+        const items = Array.isArray(b.items) ? b.items.slice(0, 50) : bad('Nada para cadastrar');
+        const res = { created: 0, updated: 0, errors: [], ids: [] };
+        items.forEach((it, i) => {
+          try { const r = upsertFreela(store, it || {}); r.reused ? res.updated++ : res.created++; res.ids.push(r.emp.id); }
+          catch (e) { res.errors.push({ line: i + 1, name: String((it || {}).name || '').slice(0, 40), msg: e.message }); }
+        });
+        if (res.ids.length) {
+          log(store.id, 'Banco de freelas: ' + res.created + ' novo(s), ' + res.updated + ' atualizado(s)');
+          emit({ type: 'freela', store_id: store.id, msg: res.ids.length + (res.ids.length > 1 ? ' freelas cadastrados' : ' freela cadastrado') });
+        }
+        return res;
+      },
+      // o gestor corrige o comparecimento: veio e esqueceu o ponto, falta com motivo (só a categoria), ou volta ao automático
+      'POST /api/freelas/:id/presenca': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        const c = db.convocations.find((x) => x.id === b.conv_id && x.employee_id === emp.id) || bad('Convocação não existe');
+        if (c.status !== 'aceito') bad('Só conta presença de convocação aceita');
+        const sh = db.shifts.find((x) => x.id === c.shift_id);
+        if (!['presente', 'justificada', 'falta', null].includes(b.value === undefined ? null : b.value)) bad('Valor inválido');
+        if (b.value === 'justificada' && !C.JUST_REASONS[b.reason]) bad('Escolha o motivo');
+        c.attendance = b.value || null;
+        c.attendance_reason = b.value === 'justificada' ? b.reason : null;
+        c.attendance_by = b.value ? nowStamp() : null;
+        const what = { presente: 'compareceu (sem ponto)', justificada: 'falta justificada (' + (C.JUST_REASONS[b.reason] || '').toLowerCase() + ')', falta: 'falta' }[b.value] || 'volta ao automático';
+        log(emp.store_id, firstName(emp.id) + (sh ? ' · ' + dl(sh.date) : '') + ': ' + what);
+        emit({ type: 'freela', store_id: emp.store_id, week: sh && C.weekStart(sh.date), ids: sh ? [sh.id] : [] });
+        return { ok: true };
+      },
+      // LGPD: sai do banco. Sem ponto batido, apaga tudo; com ponto, guarda só o necessário pelo prazo legal.
+      'POST /api/freelas/:id/remover': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        const today = C.todayISO(clock());
+        const mine = db.convocations.filter((c) => c.employee_id === emp.id);
+        mine.forEach((c) => {
+          const sh = db.shifts.find((x) => x.id === c.shift_id);
+          if (sh && sh.date >= today && !(c.punches || []).length && c.status !== 'recusado') { c.status = 'recusado'; c.canceled = true; patchEverywhere(sh.id, { employee_id: null }); }
+        });
+        const first = firstName(emp.id);
+        const keep = mine.some((c) => (c.punches || []).length);
+        if (!keep) {
+          db.convocations = db.convocations.filter((c) => c.employee_id !== emp.id);
+          db.shifts.filter((x) => x.employee_id === emp.id).forEach((x) => patchEverywhere(x.id, { employee_id: null }));
+          db.employees = db.employees.filter((e) => e.id !== emp.id);
+        } else {
+          Object.assign(emp, { active: false, removed_at: nowStamp(), apt: [], cpf_hash: null });
+          if (emp.link) emp.link.revoked = true;
+          mine.forEach((c) => { delete c.attendance_reason; });
+        }
+        log(emp.store_id, first + ' saiu do banco de freelas' + (keep ? ' (registros de ponto guardados pelo prazo legal)' : ' (dados apagados)'));
+        emit({ type: 'freela', store_id: emp.store_id, msg: first + ' saiu do banco de freelas' });
+        return { ok: true, kept: keep };
+      },
+
+      // ---------------- cargos e aptidões
+      'POST /api/roles': () => {
+        const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+        if (name.length < 2) bad('Dê um nome ao cargo');
+        if (db.roles.some((r) => r.name.toLowerCase() === name.toLowerCase())) bad('Esse cargo já existe');
+        const PAL = ['#E8735A', '#38BDF8', '#C084FC', '#F472B6', '#34D399', '#FBBF24', '#60A5FA', '#A3E635', '#FB923C', '#2DD4BF'];
+        const role = { id: 'r' + ++db.seq, name, color: /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : PAL[db.roles.length % PAL.length] };
+        db.roles.push(role);
+        log(b.store_id || db.stores[0].id, 'Cargo criado: ' + name);
+        emit({ type: 'settings', msg: 'Cargo ' + name + ' criado' });
+        return role;
+      },
+      'PUT /api/roles/:id': (id) => {
+        const r = db.roles.find((x) => x.id === id) || bad('Cargo não existe', 404);
+        if (b.name !== undefined) { const n = String(b.name).trim().slice(0, 30); if (n.length < 2) bad('Nome curto demais'); if (db.roles.some((x) => x !== r && x.name.toLowerCase() === n.toLowerCase())) bad('Esse cargo já existe'); r.name = n; }
+        if (b.color !== undefined) { if (!/^#[0-9a-f]{6}$/i.test(b.color)) bad('Cor inválida'); r.color = b.color; }
+        emit({ type: 'settings' });
+        return r;
+      },
+      'DELETE /api/roles/:id': (id) => {
+        const r = db.roles.find((x) => x.id === id) || bad('Cargo não existe', 404);
+        const users = db.employees.filter((e) => e.active !== false && e.role_id === id);
+        if (users.length) bad(users.length + (users.length > 1 ? ' pessoas têm' : ' pessoa tem') + ' este como cargo principal — mude antes de apagar');
+        if (db.shifts.some((x) => x.role_id === id && x.date >= C.todayISO(clock()))) bad('Há turnos futuros com este cargo');
+        db.roles = db.roles.filter((x) => x.id !== id);
+        db.employees.forEach((e) => { if (e.apt) e.apt = e.apt.filter((x) => x !== id); });
+        emit({ type: 'settings', msg: 'Cargo ' + r.name + ' apagado' });
+        return { ok: true };
+      },
+      'PUT /api/employees/:id/aptidoes': (id) => {
+        const e = empOf(id) || bad('Pessoa não existe', 404);
+        const okRole = (r) => db.roles.some((x) => x.id === r);
+        if (b.role_id !== undefined) { if (!okRole(b.role_id)) bad('Cargo inválido'); e.role_id = b.role_id; }
+        if (Array.isArray(b.apt)) e.apt = Array.from(new Set(b.apt.filter(okRole)));
+        if (e.apt) e.apt = e.apt.filter((x) => x !== e.role_id);
+        if (typeof b.chave === 'boolean') { e.skills = (e.skills || []).filter((k) => k !== 'chave'); if (b.chave) e.skills.push('chave'); }
+        emit({ type: 'draft', store_id: e.store_id });
+        return publicEmp(e);
+      },
+
       'POST /api/freelas/:id/convocar': (id) => {
         const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
         const made = convocar(emp, b.days);

@@ -219,3 +219,44 @@ body { min-height: 100vh; }
 .callout.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .input.bad { outline: 2px solid var(--danger); outline-offset: 0; }
 .sumline .grow { flex: 1; }
+
+/* comparecimento, banco de freelas e aptidões */
+.attcard { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.attbig { display: flex; align-items: center; gap: 12px; }
+.rate { font: 700 26px var(--mono); letter-spacing: -.04em; }
+.rate.good { color: var(--ok); } .rate.mid { color: var(--warn); } .rate.bad { color: var(--danger); } .rate.few, .rate.none { color: var(--muted); }
+.dows { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.dw { display: grid; justify-items: center; gap: 0; padding: 4px 2px; border-radius: 6px; background: var(--sunken); font-size: 10.5px; line-height: 1.25; }
+.dw b { text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.dw i { font: 600 12px var(--mono); font-style: normal; }
+.dw small { color: var(--muted); font-size: 9.5px; min-height: 12px; }
+.dw.good { background: var(--ok-soft); } .dw.good i { color: var(--ok); }
+.dw.mid { background: var(--warn-soft); } .dw.mid i { color: var(--warn); }
+.dw.bad { background: var(--danger-soft); } .dw.bad i { color: var(--danger); }
+.dw.hl { outline: 2px solid var(--ink); outline-offset: -1px; }
+.fr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.fr.dim { opacity: .55; }
+.fri { display: grid; gap: 4px; min-width: 0; justify-items: start; }
+.fri .dows { width: 100%; max-width: 380px; }
+.frr { display: grid; justify-items: end; gap: 4px; text-align: right; }
+.aptbox { display: flex; flex-wrap: wrap; gap: 6px; }
+.aptchip { --rc: var(--muted); display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 13px; cursor: pointer; }
+.aptchip:has(input:checked) { border-color: var(--rc); background: color-mix(in srgb, var(--rc) 18%, var(--surface)); }
+.matrixwrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; max-height: calc(100vh - 260px); }
+.matrix { border-collapse: collapse; width: 100%; font-size: 13px; }
+.matrix th, .matrix td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.matrix th:first-child, .matrix td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.matrix thead th { position: sticky; top: 0; background: var(--surface-2); z-index: 2; }
+.matrix thead th:first-child { z-index: 3; }
+.matrix .mp { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.matrix .input.sm { height: 28px; font-size: 12px; padding: 0 6px; }
+.matrix .mc.on { background: color-mix(in srgb, var(--rc) 14%, transparent); }
+.matrix .main { color: var(--rc); font-size: 16px; }
+.matrix input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--ink); cursor: pointer; }
+.rolehead { --rc: var(--muted); display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; font: 600 12px var(--font); color: var(--ink); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.rolehead:hover { background: var(--sunken); }
+.rolehead i { width: 9px; height: 9px; border-radius: 50%; background: var(--rc); }
+.badge.rate-good { background: var(--ok-soft); color: var(--ok); }
+.badge.rate-mid { background: var(--warn-soft); color: var(--warn); }
+.badge.rate-bad { background: var(--danger-soft); color: var(--danger); }
+.badge.rate-few { background: var(--sunken); }

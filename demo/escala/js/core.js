@@ -259,6 +259,14 @@
       }
       if (rules.noturno !== false && nightMin > 0) push('info', 'noturno', emp, null, [], n + ': ' + nightMin + ' min depois das 22h', 'Gera adicional noturno de 20% (hora noturna de 52min30s).', 'CLT art. 73');
 
+      // cargo do turno × aptidões da pessoa
+      for (const s of week) {
+        if (s.role_id && !isApt(emp, s.role_id)) {
+          const rn = ((ctx.roles || []).find((r) => r.id === s.role_id) || { name: s.role_id }).name;
+          push('alerta', 'apto', emp, s.date, [s.id], n + ' não está habilitado(a) para ' + rn, dlabel(s.date) + ' — escalado(a) como ' + rn + '. Marque a aptidão em Cargos e aptidões ou troque a pessoa.', '');
+        }
+      }
+
       // semana (o freela intermitente é convocado por dia: não tem jornada semanal contratada)
       const total = week.reduce((a, s) => a + worked(s), 0);
       const limit = weeklyLimit(emp, regime);
@@ -323,10 +331,16 @@
         if (hoursAhead < 72) push('alerta', 'convocacao_prazo', emp, sh.date, [sh.id], n + ': convocada com ' + (hoursAhead < 24 ? Math.max(0, Math.round(hoursAhead)) + 'h' : Math.floor(hoursAhead / 24) + ' dia' + (hoursAhead >= 48 ? 's' : '')) + ' de antecedência', 'O intermitente tem que ser convocado com pelo menos 3 dias corridos, já sabendo a jornada.', 'CLT art. 452-A §1º');
         if (c.status === 'pendente') push('info', 'convocacao_pendente', emp, sh.date, [sh.id], n + ' ainda não respondeu', dlabel(sh.date) + ' ' + sh.start + '–' + sh.end + '. Sem resposta em 1 dia útil, vale como recusa.', 'CLT art. 452-A §2º');
         const P = c.punches || [];
-        if (c.status === 'aceito' && !P.some((p) => p.type === 'entrada') && (sh.date < today || (sh.date === today && nm > span(sh)[0] + PONTO.tolerancia)))
-          push('alerta', 'freela_sem_ponto', emp, sh.date, [sh.id], n + ': sem ponto de entrada', dlabel(sh.date) + ' — a entrada era às ' + sh.start + '.', '');
+        const ended = sh.date < today || (sh.date === today && nm >= span(sh)[1]);
+        if (c.status === 'aceito' && !c.attendance && !P.some((p) => p.type === 'entrada') && (ended || (sh.date === today && nm > span(sh)[0] + PONTO.tolerancia)))
+          push('alerta', 'freela_sem_ponto', emp, sh.date, [sh.id], n + (ended ? ': faltou' : ': ainda sem ponto de entrada'), dlabel(sh.date) + ' — a entrada era às ' + sh.start + '.' + (ended ? ' Se veio e esqueceu o ponto, ou se tinha motivo, marque na ficha.' : ''), '');
         const late = (P.find((p) => p.type === 'entrada') || {}).late || 0;
-        if (late > 0) push('info', 'freela_atraso', emp, sh.date, [sh.id], n + ': entrou ' + late + ' min atrasada', dlabel(sh.date) + ' — tolerância de 5 min por marcação (10 min no dia).', 'CLT art. 58 §1º');
+        if (late > 0) push('info', 'freela_atraso', emp, sh.date, [sh.id], n + ': chegou ' + late + ' min depois do horário', dlabel(sh.date) + ' — tolerância de 5 min por marcação (10 min no dia).', 'CLT art. 58 §1º');
+        // histórico: quem costuma faltar nesse dia da semana (o gestor decide; o sistema só avisa)
+        if (!ended && !P.length && c.status !== 'recusado') {
+          const st = freelaAttendance(ctx.convocations.filter((x) => x.employee_id === emp.id), now).byDow[dow(sh.date)];
+          if (st.ok + st.falta >= 2 && st.rate < 0.7) push('alerta', 'freela_risco', emp, sh.date, [sh.id], n + ' veio a ' + st.ok + ' de ' + (st.ok + st.falta) + ' ' + dowPlural(dow(sh.date)) + ' aceitos', 'Nos últimos 6 meses. Vale deixar alguém de reserva para ' + dlabel(sh.date) + '.', '');
+        }
       }
     }
 
@@ -440,6 +454,51 @@
     return Math.max(0, Math.round(sai - ent - (bi != null ? bf - bi : 0)));
   }
 
+  // ---------------------------------------------------------------- aptidões
+  // Cargo principal + cargos em que a pessoa também pode trabalhar.
+  const aptos = (e) => (e ? Array.from(new Set([e.role_id].concat(e.apt || []))).filter(Boolean) : []);
+  const isApt = (e, roleId) => aptos(e).includes(roleId);
+
+  // ---------------------------------------------------------------- comparecimento do freela
+  // Conta só convocações ACEITAS: recusar é direito do intermitente e não pesa (CLT art. 452-A §3º).
+  // Falta = aceitou e não bateu entrada até o fim do turno; o gestor pode marcar "justificada" ou "compareceu".
+  // Janela de 6 meses: o suficiente para escalar, sem guardar avaliação para sempre (LGPD art. 6º III).
+  const ATTEND_DAYS = 182;
+  function attendanceOf(c, now) {
+    if (!c.shift || c.status !== 'aceito') return null;
+    if (c.attendance) return c.attendance; // 'presente' | 'justificada' | 'falta'
+    if ((c.punches || []).some((p) => p.type === 'entrada')) return 'presente';
+    const today = todayISO(now), nm = now.getHours() * 60 + now.getMinutes();
+    if (c.shift.date < today || (c.shift.date === today && nm >= span(c.shift)[1])) return 'falta';
+    return null; // ainda não deu para saber
+  }
+  function freelaAttendance(convs, now) {
+    now = now || new Date();
+    const since = addDays(todayISO(now), -ATTEND_DAYS);
+    const mk = () => ({ ok: 0, falta: 0, just: 0, late: 0, rate: null });
+    const tot = Object.assign(mk(), { recusas: 0, list: [] });
+    const byDow = [0, 1, 2, 3, 4, 5, 6].map(mk);
+    for (const c of convs) {
+      if (!c.shift || c.shift.date < since) continue;
+      if (c.status === 'recusado') { if (!c.canceled) tot.recusas++; continue; }
+      const out = attendanceOf(c, now);
+      if (!out) continue;
+      const k = out === 'presente' ? 'ok' : out === 'falta' ? 'falta' : 'just';
+      const d = byDow[dow(c.shift.date)];
+      tot[k]++; d[k]++;
+      const ent = (c.punches || []).find((p) => p.type === 'entrada');
+      if (ent && ent.late) { tot.late++; d.late++; }
+      tot.list.push({ id: c.id, date: c.shift.date, start: c.shift.start, end: c.shift.end, out, reason: c.attendance_reason || null, late: ent ? ent.late || 0 : 0 });
+    }
+    for (const x of byDow.concat([tot])) x.rate = x.ok + x.falta ? x.ok / (x.ok + x.falta) : null;
+    tot.list.sort((a, b) => b.date.localeCompare(a.date));
+    return Object.assign(tot, { byDow });
+  }
+  const dowPlural = (w) => DOW_LONG[w] + (w === 0 || w === 6 ? 's' : 's-feiras');
+  const rateText = (x) => (x && x.rate != null ? Math.round(x.rate * 100) + '%' : '—');
+  const rateLevel = (x) => (!x || x.rate == null ? 'none' : x.ok + x.falta < 2 ? 'few' : x.rate >= 0.85 ? 'good' : x.rate >= 0.6 ? 'mid' : 'bad');
+  const JUST_REASONS = { atestado: 'Atestado / saúde', emergencia: 'Emergência', combinado: 'Combinado com a loja', outro: 'Outro motivo' };
+
   // ---------------------------------------------------------------- sha256 (para guardar só o hash do link)
   function sha256(str) {
     const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
@@ -494,6 +553,7 @@
     REGIMES, regimeOf, isMinor, weeklyLimit, contractDays, dailyNormal, dailyMax, dailyTarget, suggestShift,
     ABSENCE_TYPES, absenceOn, validate, weekStats, weeklyCost, hourCost, money, money2,
     isFreela, freelaCost, FREELA_REFLEXOS, PONTO, PUNCH_LABEL, stampMin, pontoNext, pontoWorked,
+    aptos, isApt, ATTEND_DAYS, attendanceOf, freelaAttendance, rateText, rateLevel, dowPlural, JUST_REASONS,
     sha256, cpfDigits, cpfCheck, cpfValid, cpfFormat, cpfMask,
   };
 });

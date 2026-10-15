@@ -53,7 +53,9 @@
     D.convByShift = Object.fromEntries(D.convs.filter((c) => c.status !== 'recusado').map((c) => [c.shift_id, c]));
     D.week = d.shifts.filter((s) => s.date >= S.week && s.date <= D.we);
     D.regime = C.regimeOf(d.settings);
-    D.issues = C.validate({ settings: d.settings, store: d.store, employees: d.employees, shifts: d.shifts, absences: d.absences, weekStart: S.week, convocations: D.convs });
+    D.att = Object.fromEntries(D.freelas.map((e) => [e.id, C.freelaAttendance(D.convs.filter((c) => c.employee_id === e.id))]));
+    D.freelasWeek = D.freelas.filter((e) => D.week.some((x) => x.employee_id === e.id));
+    D.issues = C.validate({ settings: d.settings, store: d.store, employees: d.employees, shifts: d.shifts, absences: d.absences, weekStart: S.week, convocations: D.convs, roles: d.roles });
     D.issues.forEach((i) => { i.just = d.justifications[i.key] || null; });
     D.stats = C.weekStats({ store: d.store, employees: d.employees, shifts: D.week, weekStart: S.week, settings: d.settings });
     const rank = { erro: 3, alerta: 2, info: 1 };
@@ -186,8 +188,9 @@
 
     // freelas intermitentes (convocados pelo link)
     nodes.push(h('div', { class: 'grp freela' }, icon('link'), 'Freelas · intermitentes', h('span', null, '· ' + D.freelas.length),
-      h('button', { class: 'btn sm ghost', onclick: (ev) => { ev.stopPropagation(); freelaForm(); } }, icon('userplus'), 'Convocar freela')));
-    D.freelas.forEach((e) => { nodes.push(freelaCell(e)); D.days.forEach((day) => nodes.push(cell(e, day))); nodes.push(freelaTotal(e)); });
+      h('button', { class: 'btn sm ghost', onclick: (ev) => { ev.stopPropagation(); roster(); } }, icon('inbox'), 'Banco de freelas · ' + D.freelas.length),
+      h('button', { class: 'btn sm ghost', style: { marginLeft: 0 }, onclick: (ev) => { ev.stopPropagation(); freelaForm(); } }, icon('userplus'), 'Convocar')));
+    D.freelasWeek.forEach((e) => { nodes.push(freelaCell(e)); D.days.forEach((day) => nodes.push(cell(e, day))); nodes.push(freelaTotal(e)); });
 
     // rodapé
     nodes.push(h('div', { class: 'foot label' }, 'Pessoas por hora'));
@@ -255,7 +258,7 @@
     const ls = linkState(e);
     return h('div', { class: 'person freela', onclick: () => openFreela(e), title: 'Convocações, ponto e link de ' + e.name },
       h('span', { class: 'av freela', '--rc': (D.roles[e.role_id] || {}).color }, UI.initials(e.name)),
-      h('div', { class: 'pinfo' }, h('b', null, e.name), h('small', null, 'Freela · ' + C.money2(e.rate_hour || 0) + '/h · ' + ls.txt)),
+      h('div', { class: 'pinfo' }, h('b', null, e.name), h('small', null, 'Freela · comparece ' + C.rateText(D.att[e.id]) + ' · ' + ls.txt)),
       h('span', { class: 'lk' + (ls.on ? ' on' : ''), title: ls.txt }, icon('link')));
   }
   function freelaTotal(e) {
@@ -297,40 +300,231 @@
     } catch (e) { toast(e.message, 'erro'); }
   }
 
-  function openFreela(e) {
-    const convs = D.convs.filter((c) => c.employee_id === e.id).sort((a, b) => ((a.shift || {}).date || '').localeCompare((b.shift || {}).date || ''));
-    const ls = linkState(e), url = knownLink(e), now = new Date();
+  // ------------------------------------------------------------ comparecimento (por dia da semana)
+  function dowStrip(att, hl) {
+    return h('div', { class: 'dows' }, [1, 2, 3, 4, 5, 6, 0].map((w) => {
+      const x = att.byDow[w], n = x.ok + x.falta;
+      return h('span', { class: 'dw ' + C.rateLevel(x) + (w === hl ? ' hl' : ''), title: C.DOW_LONG[w] + ': ' + (n ? x.ok + ' de ' + n + ' aceitos (' + C.rateText(x) + ')' : 'sem histórico') + (x.just ? ' · ' + x.just + ' justificada(s)' : '') },
+        h('b', null, C.DOW_SHORT[w]), h('i', null, n ? C.rateText(x) : '—'), h('small', null, n ? x.ok + '/' + n : ''));
+    }));
+  }
+  const attLine = (a) => (a.ok + a.falta ? a.ok + ' de ' + (a.ok + a.falta) + ' turnos aceitos' : 'sem histórico ainda') + (a.just ? ' · ' + a.just + ' falta(s) justificada(s)' : '') + (a.recusas ? ' · ' + a.recusas + ' recusa(s), que não contam' : '');
+  const outBadge = (out, reason) => out === 'presente' ? h('span', { class: 'badge ok' }, 'compareceu') : out === 'falta' ? h('span', { class: 'badge erro' }, 'faltou') : out === 'justificada' ? h('span', { class: 'badge' }, 'justificada · ' + (C.JUST_REASONS[reason] || '').toLowerCase()) : null;
+
+  function setPresence(e, c, value, reason) {
+    return mutate(async () => { await api.post('/api/freelas/' + e.id + '/presenca', { conv_id: c.id, value, reason }); }, value === 'justificada' ? 'Falta justificada — não conta no comparecimento' : value === 'presente' ? 'Marcado como compareceu' : 'Voltou ao automático').then(() => openFreela(D.empById[e.id] || e));
+  }
+  function justifyMenu(anchor, e, c) {
+    UI.popover(anchor, [h('h4', null, 'Motivo (só a categoria)'),
+      Object.entries(C.JUST_REASONS).map(([k, v]) => h('button', { class: 'opt', onclick: () => { UI.closePopover(); setPresence(e, c, 'justificada', k); } }, v)),
+      h('hr'), h('p', { class: 'muted', style: { margin: '4px 8px', fontSize: '12px' } }, 'Não anexe atestado nem CID aqui — dado de saúde é sensível (LGPD art. 11).')], { alignRight: true });
+  }
+
+  function openFreela(e, opts) {
+    opts = opts || {};
+    const now = new Date(), t = C.todayISO(now);
+    const all = D.convs.filter((c) => c.employee_id === e.id && c.shift).sort((a, b) => b.shift.date.localeCompare(a.shift.date));
+    const upcoming = all.filter((c) => c.shift.date >= t).reverse();
+    const past = all.filter((c) => c.shift.date < t);
+    const shownPast = opts.full ? past : past.slice(0, 5);
+    const ls = linkState(e), url = knownLink(e), att = D.att[e.id] || C.freelaAttendance([]);
     let totMin = 0, totBase = 0;
-    const rows = convs.map((c) => {
-      const sh = c.shift || {};
-      const isToday = sh.date === C.todayISO(now);
-      const min = C.pontoWorked(c, isToday ? now : null);
-      const base = (min / 60) * (e.rate_hour || 0);
-      totMin += min; totBase += base;
-      const P = c.punches || [];
+    const row = (c) => {
+      const sh = c.shift, isToday = sh.date === t;
+      const min = C.pontoWorked(c, isToday ? now : null), base = (min / 60) * (e.rate_hour || 0);
+      if (sh.date >= C.addDays(t, -7)) { totMin += min; totBase += base; }
+      const P = c.punches || [], out = C.attendanceOf(c, now);
       return h('div', { class: 'conv' },
-        h('div', { class: 'ch' }, h('b', null, (sh.date ? dl(sh.date) : '?') + ' · ' + sh.start + '–' + sh.end), convStatus(c)),
-        h('div', { class: 'muted', style: { fontSize: '12.5px' } }, 'Convocação enviada ' + when(c.sent_at) + (c.answered_at && !c.canceled ? ' · respondeu ' + when(c.answered_at) : '')),
-        P.length ? h('div', { class: 'punches' }, P.map((p) => h('span', { class: 'pch', title: 'NSR ' + p.nsr }, C.PUNCH_LABEL[p.type] + ' ', h('b', { class: 'mono' }, p.at.slice(11, 16)), p.late ? h('em', null, ' +' + p.late + ' min') : null)))
-          : c.status === 'aceito' ? h('div', { class: 'muted', style: { fontSize: '12.5px' } }, 'Sem ponto ainda.') : null,
+        h('div', { class: 'ch' }, h('b', null, dl(sh.date) + ' · ' + sh.start + '–' + sh.end), out ? outBadge(out, c.attendance_reason) : convStatus(c)),
+        P.length ? h('div', { class: 'punches' }, P.map((p) => h('span', { class: 'pch', title: 'NSR ' + p.nsr }, C.PUNCH_LABEL[p.type] + ' ', h('b', { class: 'mono' }, p.at.slice(11, 16)), p.late ? h('em', null, ' +' + p.late + ' min') : null))) : null,
         min ? h('div', { class: 'mono', style: { fontSize: '12.5px' } }, C.fmtDur(min) + ' · ' + C.money2(base) + ' + ' + C.money2(base * C.FREELA_REFLEXOS) + ' de reflexos') : null,
-        !P.length && c.status !== 'recusado' && sh.date >= today() ? h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/cancel', { conv_id: c.id }); }, 'Convocação cancelada — o turno voltou a ficar aberto').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar convocação')) : null);
-    });
+        h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '4px' } },
+          !P.length && c.status !== 'recusado' && sh.date >= t ? h('button', { class: 'btn sm ghost danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/cancel', { conv_id: c.id }); }, 'Convocação cancelada — o turno voltou a ficar aberto').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar convocação') : null,
+          out === 'falta' && !c.attendance ? [h('button', { class: 'btn sm ghost', onclick: () => setPresence(e, c, 'presente') }, 'Veio, sem ponto'), h('button', { class: 'btn sm ghost', onclick: (ev) => justifyMenu(ev.currentTarget, e, c) }, 'Justificar falta')] : null,
+          c.attendance ? h('button', { class: 'btn sm ghost', onclick: () => setPresence(e, c, null) }, 'Desfazer marcação') : null));
+    };
+    const roleTxt = C.aptos(e).map((r) => (D.roles[r] || {}).name).filter(Boolean).join(', ');
     UI.drawer(e.name, [
       h('div', { class: 'row' }, h('span', { class: 'av freela', '--rc': (D.roles[e.role_id] || {}).color, style: { width: '46px', height: '46px', fontSize: '14px' } }, UI.initials(e.name)),
-        h('div', null, h('b', null, e.name), h('div', { class: 'muted' }, 'Freela intermitente · ' + (D.roles[e.role_id] || {}).name + ' · CPF ' + (e.cpf_mask || '—') + ' · ' + C.money2(e.rate_hour || 0) + '/h'))),
+        h('div', null, h('b', null, e.name), h('div', { class: 'muted' }, 'Freela intermitente · CPF ' + (e.cpf_mask || '—') + ' · ' + C.money2(e.rate_hour || 0) + '/h'), h('div', { class: 'muted' }, 'Apto(a) a: ' + (roleTxt || '—')))),
+      h('div', { class: 'attcard' }, h('div', { class: 'attbig' }, h('b', { class: 'rate ' + C.rateLevel(att) }, C.rateText(att)), h('span', null, 'de comparecimento', h('br'), h('small', { class: 'muted' }, attLine(att) + ' · últimos 6 meses'))), dowStrip(att)),
       h('div', { class: 'linkcard' + (ls.on ? ' on' : '') }, icon(ls.on ? 'link' : 'lock'),
-        h('div', { class: 'grow' }, h('b', null, ls.on ? 'Link de ponto válido' : 'Link ' + ls.txt.replace('link ', '')), h('small', { class: 'muted' }, ls.on ? 'até ' + dl(e.link.valid_until.slice(0, 10)) + ' 23:59' + (url ? '' : ' · o link completo ficou no aparelho que gerou') : 'Gere um novo para mandar de novo.')),
+        h('div', { class: 'grow' }, h('b', null, ls.on ? 'Link de ponto válido' : e.link ? 'Link ' + ls.txt.replace('link ', '') : 'Sem link ativo'), h('small', { class: 'muted' }, ls.on ? 'até ' + dl(e.link.valid_until.slice(0, 10)) + ' 23:59' + (url ? '' : ' · o link completo ficou no aparelho que gerou') : 'O link é gerado na convocação.')),
         url && ls.on ? h('button', { class: 'btn sm', onclick: () => shareLink(e, url, e.link.valid_until) }, icon('send'), 'Mandar') : null),
-      h('div', { class: 'field' }, h('span', null, 'Convocações'), rows.length ? h('div', { class: 'list-plain' }, rows) : h('div', { class: 'muted' }, 'Nenhuma convocação.')),
-      totMin ? h('div', { class: 'sumline' }, h('span', { class: 'grow' }, 'A pagar (' + C.fmtDur(totMin) + ')'), h('b', { class: 'mono' }, C.money2(totBase * (1 + C.FREELA_REFLEXOS)))) : null,
-      h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Intermitente recebe ao fim de cada período as horas + 13º e férias com 1/3 proporcionais (CLT art. 452-A §6º); FGTS e INSS recolhidos pela empresa. Atraso de até 5 min por marcação não conta (art. 58 §1º).'),
+      h('div', { class: 'field' }, h('span', null, 'Próximos'), upcoming.length ? h('div', { class: 'list-plain' }, upcoming.map(row)) : h('div', { class: 'muted' }, 'Nenhuma convocação marcada.')),
+      past.length ? h('div', { class: 'field' }, h('span', null, 'Histórico'), h('div', { class: 'list-plain' }, shownPast.map(row)),
+        past.length > shownPast.length ? h('button', { class: 'btn sm ghost', onclick: () => openFreela(e, { full: true }) }, 'Ver os ' + past.length + ' turnos') : null) : null,
+      totMin ? h('div', { class: 'sumline' }, h('span', { class: 'grow' }, 'A pagar nos últimos 7 dias (' + C.fmtDur(totMin) + ')'), h('b', { class: 'mono' }, C.money2(totBase * (1 + C.FREELA_REFLEXOS)))) : null,
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Falta = aceitou e não bateu entrada até o fim do turno. Recusar não conta (CLT art. 452-A §3º). O freela vê este mesmo histórico no link dele e pode contestar; a decisão de chamar é sempre sua (LGPD art. 20).'),
     ], [
-      h('button', { class: 'btn primary', onclick: () => freelaForm(e) }, icon('plus'), 'Convocar mais dias'),
-      h('button', { class: 'btn', onclick: () => newLink(e) }, icon('link'), 'Gerar novo link'),
+      h('button', { class: 'btn primary', onclick: () => freelaForm(e) }, icon('plus'), 'Convocar'),
+      h('button', { class: 'btn', onclick: () => newLink(e) }, icon('link'), 'Novo link'),
       h('span', { class: 'spacer' }),
-      ls.on ? h('button', { class: 'btn danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/revoke'); }, 'Link cancelado — não abre mais').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar link') : null,
+      ls.on ? h('button', { class: 'btn ghost danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/revoke'); }, 'Link cancelado — não abre mais').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar link') : null,
+      h('button', { class: 'btn ghost danger', onclick: (ev) => confirmPop(ev.currentTarget, h('div', { style: { display: 'grid', gap: '6px' } }, h('b', null, 'Tirar ' + UI.first(e.name) + ' do banco?'), h('span', { class: 'muted' }, 'Convocações futuras são canceladas. Se nunca bateu ponto, os dados são apagados; se já trabalhou, o registro de ponto fica guardado só pelo prazo legal, sem uso para escala.')), 'Remover', () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/remover'); }, 'Removido do banco de freelas').then(UI.closeDrawer)) }, 'Remover do banco'),
     ]);
+  }
+
+  // ------------------------------------------------------------ banco de freelas / quem chamar
+  function openShiftMenu(anchor, s) {
+    UI.popover(anchor, [h('h4', null, 'Turno aberto · ' + dl(s.date) + ' ' + s.start + '–' + s.end),
+      s.date >= today() ? h('button', { class: 'opt', onclick: () => { UI.closePopover(); roster({ shift: s }); } }, icon('userplus'), 'Chamar freela…') : null,
+      h('button', { class: 'opt', onclick: () => { UI.closePopover(); editShift(s); } }, icon('clock'), 'Editar turno')]);
+  }
+
+  async function callFreela(e, shift, reserve) {
+    S.selfUntil = Date.now() + 1500;
+    try {
+      const day = reserve ? { date: shift.date, start: shift.start, end: shift.end, break_min: shift.break_min, role_id: shift.role_id, note: 'reserva' } : { shift_id: shift.id, date: shift.date, start: shift.start, end: shift.end, break_min: shift.break_min };
+      const r = await api.post('/api/freelas/' + e.id + '/convocar', { days: [day] });
+      let url = linkState(e).on ? knownLink(e) : null, validUntil = r.valid_until;
+      if (!url) {
+        const token = newToken();
+        const lr = await api.post('/api/freelas/' + e.id + '/link', { token });
+        url = pontoUrl(token); validUntil = lr.valid_until;
+        UI.store.set(linkKey(e.id), { url, created_at: lr.link_created_at });
+      }
+      await load({ flash: [] });
+      shareLink(D.empById[e.id] || e, url, validUntil || (D.empById[e.id] || e).link.valid_until);
+    } catch (err) { toast(err.message, 'erro'); }
+  }
+
+  function roster(opts) {
+    opts = opts || {};
+    const sh = opts.shift, w = sh ? C.dow(sh.date) : null, role = sh ? D.roles[sh.role_id] : null;
+    const busy = (e) => sh && (S.data.shifts.some((x) => x.employee_id === e.id && x.date === sh.date) || D.convs.some((c) => c.employee_id === e.id && c.status !== 'recusado' && c.shift && c.shift.date === sh.date));
+    const score = (e) => { const a = D.att[e.id], x = sh ? a.byDow[w] : a; return x.rate == null ? 0.5 : x.rate; };
+    const list = D.freelas.slice().sort((a, b) => (sh ? (C.isApt(b, sh.role_id) - C.isApt(a, sh.role_id)) || (busy(a) - busy(b)) : 0) || score(b) - score(a) || a.name.localeCompare(b.name));
+    const q = h('input', { class: 'input', placeholder: 'Buscar pelo nome', autocomplete: 'off' });
+    const box = h('div', { class: 'list-plain' });
+    const draw = () => {
+      const term = q.value.trim().toLowerCase();
+      box.replaceChildren(...list.filter((e) => !term || e.name.toLowerCase().includes(term)).map((e) => {
+        const a = D.att[e.id], x = sh ? a.byDow[w] : a, n = x.ok + x.falta;
+        const apt = !sh || C.isApt(e, sh.role_id), b = busy(e);
+        return h('div', { class: 'fr' + (b ? ' dim' : '') },
+          h('span', { class: 'av freela', '--rc': (D.roles[e.role_id] || {}).color }, UI.initials(e.name)),
+          h('div', { class: 'fri' },
+            h('b', null, e.name),
+            h('small', { class: 'muted' }, C.aptos(e).map((r) => (D.roles[r] || {}).name).join(' · ') + ' · ' + C.money2(e.rate_hour || 0) + '/h'),
+            !apt ? h('span', { class: 'badge alerta' }, 'não habilitado(a) para ' + role.name) : null,
+            b ? h('span', { class: 'badge' }, 'já escalado(a) neste dia') : null,
+            dowStrip(a, w)),
+          h('div', { class: 'frr' },
+            h('b', { class: 'rate ' + C.rateLevel(x) }, n ? C.rateText(x) : 'novo'),
+            h('small', { class: 'muted' }, n ? x.ok + ' de ' + n + (sh ? ' ' + C.dowPlural(w) : ' turnos') : 'sem histórico'),
+            sh ? h('button', { class: 'btn sm ' + (apt && !b ? 'lime' : ''), disabled: b || null, onclick: () => callFreela(e, sh, opts.reserve) }, 'Convocar') : h('div', { class: 'row', style: { gap: '4px' } }, h('button', { class: 'btn sm', onclick: () => freelaForm(e) }, 'Convocar'), h('button', { class: 'btn sm ghost', onclick: () => openFreela(e) }, 'Ficha'))));
+      }));
+      if (!box.children.length) box.append(h('div', { class: 'empty' }, 'Ninguém no banco ainda.'));
+    };
+    q.addEventListener('input', draw);
+    draw();
+    const head = sh ? h('div', { class: 'callout' }, h('b', null, (opts.reserve ? 'Reserva para ' : 'Quem chamar para ') + dl(sh.date) + ' · ' + sh.start + '–' + sh.end + ' · ' + (role ? role.name : '')),
+      h('span', null, 'Em ordem: habilitados para ' + (role ? role.name : 'a função') + ', livres no dia e quem mais compareceu aos ' + C.dowPlural(w) + ' que aceitou. Recusar convocação não pesa (CLT art. 452-A §3º).'))
+      : null;
+    UI.drawer(sh ? 'Quem chamar?' : 'Banco de freelas · ' + S.data.store.short, [
+      head,
+      sh ? null : h('div', { class: 'row', style: { flexWrap: 'wrap' } }, h('button', { class: 'btn primary', onclick: () => quickFreela() }, icon('userplus'), 'Cadastrar freela'), h('button', { class: 'btn', onclick: () => pasteFreelas() }, icon('copy'), 'Colar lista'), h('button', { class: 'btn ghost', onclick: () => openRoles() }, 'Cargos e aptidões')),
+      q, box,
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, 'Guardamos nome, CPF mascarado, cargos e o comparecimento dos últimos 6 meses só para organizar a escala desta empresa (LGPD art. 7º IX). Nada disso aparece na TV nem para a equipe; o freela vê o próprio histórico no link.'),
+    ], null, { wide: true });
+  }
+
+  const roleChecks = (main, sel) => S.data.roles.filter((r) => r.id !== main).map((r) => { const cb = h('input', { type: 'checkbox', value: r.id, checked: (sel || []).includes(r.id) }); return { r, cb, el: h('label', { class: 'aptchip', '--rc': r.color }, cb, r.name) }; });
+  function quickFreela() {
+    const f = {
+      name: h('input', { class: 'input', placeholder: 'Nome e sobrenome', maxlength: 60, autocomplete: 'off' }),
+      cpf: h('input', { class: 'input mono', placeholder: '000.000.000-00', inputmode: 'numeric', maxlength: 14, autocomplete: 'off' }),
+      role: h('select', { class: 'input' }, S.data.roles.map((r) => h('option', { value: r.id, selected: r.id === S.data.store.default_role }, r.name))),
+      rate: h('input', { class: 'input mono', type: 'number', min: 0, step: 0.5, value: 15 }),
+    };
+    f.cpf.addEventListener('input', () => { const d = C.cpfDigits(f.cpf.value).slice(0, 11); f.cpf.value = d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2'); f.cpf.classList.toggle('bad', d.length === 11 && !C.cpfValid(d)); });
+    const aptBox = h('div', { class: 'aptbox' });
+    let checks = [];
+    const drawApt = () => { checks = roleChecks(f.role.value, checks.filter((c) => c.cb.checked).map((c) => c.r.id)); aptBox.replaceChildren(...checks.map((c) => c.el)); };
+    f.role.addEventListener('change', drawApt); drawApt();
+    const save = async (again) => {
+      if (f.name.value.trim().split(/\s+/).length < 2) return toast('Informe nome e sobrenome', 'erro');
+      if (!C.cpfValid(f.cpf.value)) return toast('CPF inválido', 'erro');
+      S.selfUntil = Date.now() + 1500;
+      try {
+        const r = await api.post('/api/freelas/cadastro', { store_id: S.storeId, items: [{ name: f.name.value, cpf: f.cpf.value, role_id: f.role.value, rate_hour: +f.rate.value, apt: checks.filter((c) => c.cb.checked).map((c) => c.r.id) }] });
+        if (r.errors.length) return toast(r.errors[0].msg, 'erro');
+        toast(r.updated ? 'CPF já estava no banco — cadastro atualizado' : UI.first(f.name.value) + ' entrou no banco de freelas');
+        await load();
+        if (again) quickFreela(); else roster();
+      } catch (e) { toast(e.message, 'erro'); }
+    };
+    UI.drawer('Cadastrar freela', [
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Nome completo'), f.name), h('label', { class: 'field' }, h('span', null, 'CPF'), f.cpf)),
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Cargo principal'), f.role), h('label', { class: 'field' }, h('span', null, 'Valor da hora (R$)'), f.rate)),
+      h('div', { class: 'field' }, h('span', null, 'Também apto(a) a'), aptBox),
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, 'Só o necessário: o CPF fica guardado mascarado. Telefone não é salvo — vai junto do link na hora de convocar.'),
+    ], [h('button', { class: 'btn primary', onclick: () => save(false) }, icon('check'), 'Cadastrar'), h('button', { class: 'btn', onclick: () => save(true) }, 'Cadastrar e outro'), h('span', { class: 'spacer' }), h('button', { class: 'btn ghost', onclick: () => roster() }, 'Voltar')]);
+    setTimeout(() => f.name.focus(), 50);
+  }
+
+  function pasteFreelas() {
+    const ta = h('textarea', { class: 'input mono', rows: 8, placeholder: 'Maria Souza; 123.456.789-09; Vendas; 15\nJoão Lima; 98765432100; Caixa\n…' });
+    const out = h('div', { class: 'list-plain' });
+    const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const go = async () => {
+      const items = ta.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+        const p = l.split(/\s*[;\t]\s*|\s*,\s*(?=\d)/);
+        const role = S.data.roles.find((r) => norm(r.name) === norm(p[2]) || r.id === norm(p[2]));
+        return { name: p[0], cpf: p[1], role_id: role ? role.id : S.data.store.default_role, rate_hour: +String(p[3] || '').replace(',', '.') || 15 };
+      });
+      if (!items.length) return toast('Cole pelo menos uma linha', 'erro');
+      S.selfUntil = Date.now() + 1500;
+      try {
+        const r = await api.post('/api/freelas/cadastro', { store_id: S.storeId, items });
+        out.replaceChildren(h('div', { class: 'sumline' }, h('span', { class: 'grow' }, r.created + ' novo(s) · ' + r.updated + ' já estavam no banco'), r.errors.length ? h('span', { class: 'badge erro' }, r.errors.length + ' com erro') : h('span', { class: 'badge ok' }, 'tudo certo')),
+          ...r.errors.map((x) => h('div', { class: 'it' }, h('span', { class: 'badge erro' }, 'linha ' + x.line), h('span', { class: 'grow' }, (x.name || '—') + ': ' + x.msg))));
+        await load();
+      } catch (e) { toast(e.message, 'erro'); }
+    };
+    UI.drawer('Colar lista de freelas', [
+      h('p', { class: 'muted', style: { margin: 0 } }, 'Uma pessoa por linha: nome; CPF; cargo (opcional); valor da hora (opcional). Pode colar direto de uma planilha.'),
+      ta, out,
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, 'CPF inválido fica de fora e aparece aqui. CPF repetido atualiza o cadastro em vez de duplicar.'),
+    ], [h('button', { class: 'btn primary', onclick: go }, icon('check'), 'Cadastrar'), h('span', { class: 'spacer' }), h('button', { class: 'btn ghost', onclick: () => roster() }, 'Voltar ao banco')]);
+  }
+
+  // ------------------------------------------------------------ cargos e aptidões
+  function openRoles() {
+    const roles = S.data.roles;
+    const people = D.staff.concat(D.freelas);
+    const put = (e, body) => mutate(async () => { await api.put('/api/employees/' + e.id + '/aptidoes', body); }).then(() => openRoles());
+    const editRole = (anchor, r) => {
+      const nm = h('input', { class: 'input', value: r.name, maxlength: 30 });
+      const col = h('input', { class: 'input', type: 'color', value: r.color, style: { padding: '2px', height: '36px' } });
+      UI.popover(anchor, h('div', { class: 'confirm' }, h('b', null, 'Cargo'), nm, col,
+        h('div', { class: 'row' },
+          h('button', { class: 'btn sm ghost danger', onclick: () => { UI.closePopover(); mutate(async () => { await api.del('/api/roles/' + r.id); }, 'Cargo apagado').then(() => openRoles()); } }, 'Apagar'),
+          h('button', { class: 'btn sm primary', onclick: () => { UI.closePopover(); mutate(async () => { await api.put('/api/roles/' + r.id, { name: nm.value, color: col.value }); }, 'Cargo salvo').then(() => openRoles()); } }, 'Salvar'))));
+    };
+    const newName = h('input', { class: 'input', placeholder: 'Novo cargo — ex.: Vitrinista', maxlength: 30 });
+    const addRole = () => { if (newName.value.trim().length < 2) return newName.focus(); mutate(async () => { await api.post('/api/roles', { name: newName.value, store_id: S.storeId }); }, 'Cargo criado').then(() => openRoles()); };
+    newName.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') addRole(); });
+    const table = h('table', { class: 'matrix' },
+      h('thead', null, h('tr', null, h('th', null, 'Pessoa · cargo principal'),
+        roles.map((r) => h('th', null, h('button', { class: 'rolehead', '--rc': r.color, title: 'Editar cargo', onclick: (ev) => editRole(ev.currentTarget, r) }, h('i'), r.name))),
+        h('th', null, 'Chave'))),
+      h('tbody', null, people.map((e) => h('tr', null,
+        h('td', null, h('div', { class: 'mp' }, h('b', null, e.name), C.isFreela(e) ? h('span', { class: 'badge' }, 'freela') : null),
+          h('select', { class: 'input sm', onchange: (ev) => put(e, { role_id: ev.target.value }) }, roles.map((r) => h('option', { value: r.id, selected: r.id === e.role_id }, r.name)))),
+        roles.map((r) => {
+          const main = r.id === e.role_id, on = C.isApt(e, r.id);
+          return h('td', { class: 'mc' + (on ? ' on' : ''), '--rc': r.color }, main ? h('span', { class: 'main', title: 'Cargo principal' }, '●')
+            : h('input', { type: 'checkbox', checked: on, 'aria-label': e.name + ' apto a ' + r.name, onchange: (ev) => put(e, { apt: (e.apt || []).filter((x) => x !== r.id).concat(ev.target.checked ? [r.id] : []) }) }));
+        }),
+        h('td', { class: 'mc' }, C.isFreela(e) ? h('span', { class: 'muted' }, '—') : h('input', { type: 'checkbox', checked: (e.skills || []).includes('chave'), 'aria-label': e.name + ' tem a chave', onchange: (ev) => put(e, { chave: ev.target.checked }) }))))));
+    UI.drawer('Cargos e aptidões · ' + S.data.store.short, [
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '13px' } }, 'Marque em que cada pessoa pode trabalhar. Turno escalado fora das aptidões vira alerta, e o "Quem chamar?" mostra primeiro quem está habilitado para o cargo do turno.'),
+      h('div', { class: 'row' }, newName, h('button', { class: 'btn', onclick: addRole }, icon('plus'), 'Criar cargo')),
+      h('div', { class: 'matrixwrap' }, table),
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, '● = cargo principal (mude no seletor). Clique no nome de um cargo para renomear, trocar a cor ou apagar.'),
+    ], null, { wide: true });
   }
 
   // Convocar freela: novo (nome + CPF) ou existente; dias = turnos abertos marcados + dias avulsos.
@@ -417,7 +611,7 @@
       existing ? null : h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Nome completo'), f.name), h('label', { class: 'field' }, h('span', null, 'CPF'), f.cpf)),
       h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Função'), f.role), h('label', { class: 'field' }, h('span', null, 'Valor da hora (R$)'), f.rate)),
       h('label', { class: 'field' }, h('span', null, 'WhatsApp (opcional — só para abrir a conversa, não fica salvo)'), f.phone),
-      h('div', { class: 'field' }, h('span', null, 'Cobrir turnos abertos'), pool.length ? h('div', { class: 'list-plain' }, checks.map(({ x, cb }) => h('label', { class: 'pickrow' }, cb, h('span', { class: 'grow' }, h('b', null, dl(x.date)), ' ' + x.start + '–' + x.end), h('small', { class: 'muted' }, (D.roles[x.role_id] || {}).name)))) : h('div', { class: 'muted' }, 'Nenhum turno aberto nas próximas duas semanas.')),
+      h('div', { class: 'field' }, h('span', null, 'Cobrir turnos abertos'), pool.length ? h('div', { class: 'list-plain' }, checks.map(({ x, cb }) => { const st = existing && D.att[existing.id] ? D.att[existing.id].byDow[C.dow(x.date)] : null, n = st ? st.ok + st.falta : 0; return h('label', { class: 'pickrow' }, cb, h('span', { class: 'grow' }, h('b', null, dl(x.date)), ' ' + x.start + '–' + x.end), existing && !C.isApt(existing, x.role_id) ? h('span', { class: 'badge alerta' }, 'não habilitado') : null, n ? h('span', { class: 'badge rate-' + C.rateLevel(st), title: 'Veio a ' + st.ok + ' de ' + n + ' ' + C.dowPlural(C.dow(x.date)) + ' aceitos' }, C.rateText(st) + ' aos ' + C.DOW_SHORT[C.dow(x.date)]) : null, h('small', { class: 'muted' }, (D.roles[x.role_id] || {}).name)); })) : h('div', { class: 'muted' }, 'Nenhum turno aberto nas próximas duas semanas.')),
       h('div', { class: 'field' }, h('span', null, 'Ou outros dias'), extra, h('button', { class: 'btn sm', onclick: () => addRow() }, icon('plus'), 'Adicionar dia')),
       warn, summary,
       UI.sala || location.hostname !== 'localhost' ? h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, 'Demo público: use dados fictícios (o CPF fica guardado só mascarado).') : null,
@@ -471,7 +665,7 @@
       '--rc': role.color, draggable: conv ? 'false' : 'true', tabindex: '0', role: 'button', dataset: { id: s.id },
       title: [s.start + '–' + s.end + ' · ' + C.fmtDur(w) + ' trabalhadas'].concat(tips, D.changed.has(s.id) ? ['Alterado — ainda não publicado'] : [], ['Arraste para mover · Alt/Ctrl + arrastar copia']).join('\n'),
     }, h('span', { class: 't' }, s.start + '–' + s.end), h('span', { class: 's' }, sub), sev ? h('span', { class: 'flag ' + sev }) : null);
-    const open = () => (conv && D.empById[conv.employee_id] ? openFreela(D.empById[conv.employee_id]) : editShift(s));
+    const open = () => (conv && D.empById[conv.employee_id] ? openFreela(D.empById[conv.employee_id]) : !s.employee_id ? openShiftMenu(el, s) : editShift(s));
     el.addEventListener('click', (ev) => { ev.stopPropagation(); open(); });
     el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') open(); if (!conv && (ev.key === 'Delete' || ev.key === 'Backspace')) removeShift(s); });
     el.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/plain', s.id); ev.dataTransfer.effectAllowed = 'copyMove'; el.classList.add('dragging'); });
@@ -564,6 +758,9 @@
   // correções de um clique para os casos mais comuns
   function quickFix(i) {
     if (i.just) return null;
+    if (i.code === 'freela_risco' && i.ids[0]) { const sh = S.data.shifts.find((x) => x.id === i.ids[0]); if (sh) return h('button', { class: 'btn sm ghost', onclick: () => roster({ shift: sh, reserve: true }) }, icon('userplus'), 'Achar reserva'); }
+    if (i.code === 'apto') return h('button', { class: 'btn sm ghost', onclick: () => openRoles() }, 'Ajustar aptidões');
+    if (i.code === 'aberto' && i.ids[0]) { const sh = S.data.shifts.find((x) => x.id === i.ids[0]); if (sh && sh.date >= today()) return h('button', { class: 'btn sm ghost', onclick: () => roster({ shift: sh }) }, icon('userplus'), 'Chamar freela'); }
     if (/^(convocacao_|freela_)/.test(i.code) && D.empById[i.emp]) return h('button', { class: 'btn sm ghost', onclick: () => openFreela(D.empById[i.emp]) }, icon('link'), 'Ver freela');
     if (i.code === 'ausencia') return h('button', { class: 'btn sm ghost', onclick: () => mutate(async () => { for (const id of i.ids) await api.put('/api/shifts/' + id, { employee_id: null }); return i.ids; }, 'Turno liberado para a equipe pegar') }, icon('hand'), 'Liberar turno');
     if (i.code === 'cobertura' && i.h0 != null) {
@@ -727,7 +924,7 @@
       h('dl', { class: 'kv' },
         h('dt', null, 'Nesta semana'), h('dd', null, C.fmtDur(p.minutes) + ' em ' + p.days + ' dias · limite ' + C.fmtDur(C.weeklyLimit(e, D.regime))),
         h('dt', null, 'Custo'), h('dd', null, C.money(C.weeklyCost(e)) + ' por semana com encargos · R$ ' + C.hourCost(e, D.regime).toFixed(2).replace('.', ',') + '/h na regra ' + D.regime.short),
-        h('dt', null, 'Habilidades'), h('dd', null, (e.skills || []).includes('chave') ? 'abre e fecha a loja (chave)' : '—'),
+        h('dt', null, 'Apto(a) a'), h('dd', null, C.aptos(e).map((r) => (D.roles[r] || {}).name).join(', ') + ((e.skills || []).includes('chave') ? ' · abre e fecha a loja (chave)' : ''), ' ', h('a', { href: '#', onclick: (ev) => { ev.preventDefault(); openRoles(); } }, 'editar')),
         h('dt', null, 'Indisponível'), h('dd', null, unav || 'sem restrição'),
         C.isMinor(e, S.week) ? [h('dt', null, 'Idade'), h('dd', null, 'menor de 18 — não trabalha depois das 22h nem faz hora extra')] : null,
         h('dt', null, 'Domingos'), h('dd', null, h('span', { class: 'row', style: { gap: '4px', flexWrap: 'wrap' } }, suns.map((x) => h('span', { class: 'badge ' + (x.worked ? 'alerta' : 'ok'), title: x.worked ? 'Trabalhou' : 'Folgou' }, C.fmtDay(x.d) + (x.worked ? ' trab.' : ' folga')))))),
@@ -898,6 +1095,8 @@
     const p = S.data.publication;
     UI.popover($('btnMore'), [
       h('button', { class: 'opt', onclick: () => { UI.closePopover(); openCompare(); } }, icon('scale'), 'Comparar CLT × PEC'),
+      h('button', { class: 'opt', onclick: () => { UI.closePopover(); openRoles(); } }, icon('userplus'), 'Cargos e aptidões'),
+      h('button', { class: 'opt', onclick: () => { UI.closePopover(); roster(); } }, icon('inbox'), 'Banco de freelas'),
       p.published && p.total ? h('button', { class: 'opt', onclick: () => { UI.closePopover(); mutate(async () => { await api.post('/api/week/discard', { store_id: S.storeId, week: S.week }); }, 'Alterações descartadas'); } }, icon('refresh'), 'Descartar alterações', h('span', { class: 'mono' }, p.total)) : null,
       h('button', { class: 'opt', onclick: () => { UI.closePopover(); confirmPop($('btnMore'), 'Apagar todos os turnos desta semana?', 'Apagar', () => mutate(async () => { await api.post('/api/week/clear', { store_id: S.storeId, week: S.week }); }, 'Semana limpa')); } }, icon('trash'), 'Limpar a semana'),
       h('hr'),
@@ -963,8 +1162,8 @@
     $('btnMore').append(icon('more'));
     $('btnAuto').append(icon('sparkle'), h('span', { class: 'lbl' }, 'Gerar automática'));
     $('btnCopy').append(icon('copy'), h('span', { class: 'lbl' }, 'Copiar semana anterior'));
-    $('btnFreela').append(icon('userplus'), h('span', { class: 'lbl' }, 'Convocar freela'));
-    $('btnFreela').onclick = () => freelaForm();
+    $('btnFreela').append(icon('userplus'), h('span', { class: 'lbl' }, 'Freelas'));
+    $('btnFreela').onclick = () => roster();
     $('lnkMural').append(icon('tv'), h('span', { class: 'lbl' }, 'Mural'));
     $('lnkEu').append(icon('phone'), h('span', { class: 'lbl' }, 'Equipe'));
     $('prev').onclick = () => go({ week: C.addDays(S.week, -7) });
