@@ -56,10 +56,11 @@
         faltas.length ? h('div', { class: 'plist' }, faltas.map((x) => h('span', null, dl(x.date) + ' · ', h('b', null, x.out === 'falta' ? 'falta' : 'justificada')))) : h('p', { class: 'note' }, 'Nenhuma falta registrada.'),
         h('p', { class: 'note' }, 'Recusar uma convocação não conta. A loja usa isso só para organizar a escala. Se algo estiver errado (você veio e o ponto não registrou, ou teve um motivo), fale com a loja para corrigir.')));
     }
-    const total = v.items.reduce((a, i) => a + i.pay, 0);
-    if (total > 0) nodes.push(h('div', { class: 'card' }, h('h2', null, 'A receber até agora'),
-      h('div', { class: 'pay' }, h('span', null, 'Horas + 13º e férias + 1/3 proporcionais'), h('b', null, C.money2(total * (1 + v.reflexos)))),
-      h('p', { class: 'note' }, 'Valor da hora ' + C.money2(v.rate_hour) + '. O pagamento sai ao fim de cada período trabalhado (CLT art. 452-A §6º).')));
+    const wk = C.weekStart(C.todayISO(now)); // paga-se por período: mostra o desta semana
+    const total = v.items.filter((i) => i.date >= wk).reduce((a, i) => a + i.pay, 0);
+    if (total > 0) nodes.push(h('div', { class: 'card' }, h('h2', null, 'A receber nesta semana'),
+      h('div', { class: 'pay' }, h('span', null, 'Combinado dos dias trabalhados + 13º e férias + 1/3 proporcionais'), h('b', null, C.money2(total * (1 + v.reflexos)))),
+      h('p', { class: 'note' }, 'Diária combinada ' + C.money2(v.daily_rate) + ', mais os adicionais combinados em cada dia. O pagamento sai ao fim de cada período trabalhado (CLT art. 452-A §6º).')));
     nodes.push(h('p', { class: 'note', style: { textAlign: 'center' } }, 'Link pessoal — não repasse. Vale até ' + dl(v.valid_until.slice(0, 10)) + ' ' + v.valid_until.slice(11, 16) + '. ',
       h('br'), 'Convocação de trabalho intermitente (CLT art. 452-A): sem resposta em 1 dia útil, conta como recusa.'));
     app.replaceChildren(...nodes);
@@ -70,7 +71,7 @@
   function todayCard(it, now) {
     const card = h('div', { class: 'card', id: 'today' }, h('h2', null, 'Hoje'));
     if (!it) { card.append(h('p', { class: 'note' }, 'Você não tem turno hoje. Veja abaixo os próximos dias.')); return card; }
-    card.append(h('div', { class: 'shiftline' }, h('span', { class: 't' }, it.start + '–' + it.end), h('small', null, it.break_min ? 'intervalo de ' + it.break_min + ' min' : 'sem intervalo')));
+    card.append(h('div', { class: 'shiftline' }, h('span', { class: 't' }, it.start + '–' + it.end), h('small', null, it.break_min ? 'intervalo de ' + it.break_min + ' min' : 'sem intervalo')), combLine(it.combinado));
     if (it.status === 'pendente') {
       card.append(h('div', { class: 'why' }, h('b', null, 'Confirme antes'), h('span', null, 'Aceite a convocação para poder bater o ponto.')),
         h('div', { class: 'row' }, h('button', { class: 'punchbtn', onclick: () => answer(it, 'aceito') }, icon('check'), 'Aceitar'), h('button', { class: 'punchbtn alt', onclick: () => answer(it, 'recusado') }, 'Recusar')));
@@ -99,6 +100,9 @@
     return 'faltam ' + (hh ? hh + 'h ' + C.pad(mm) + 'min' : mm + 'min ' + C.pad(ss) + 's');
   }
 
+  // o combinado do dia: diária + adicional à parte (quando houver)
+  const combLine = (p) => (p ? h('div', { class: 'comb' }, 'Combinado ', h('b', null, C.money2(p.total)), p.extra ? h('small', null, ' · diária ' + C.money2(p.daily) + ' + ' + C.money2(p.extra) + (p.note ? ' (' + p.note + ')' : '')) : null) : null);
+
   function receiptCard(r) {
     return h('div', { class: 'receipt' }, h('h3', null, icon('check'), 'Comprovante de registro de ponto'),
       h('span', { class: 'big' }, r.tipo + ' · ' + r.at.slice(11, 16)),
@@ -115,9 +119,10 @@
   function scheduleCard(v, now) {
     const t = C.todayISO(now);
     const card = h('div', { class: 'card' }, h('h2', null, 'Sua escala'));
-    if (!v.items.length) { card.append(h('p', { class: 'note' }, 'Nenhum dia convocado.')); return card; }
-    v.items.forEach((i) => {
-      const body = h('div', { class: 'body' }, h('span', { class: 'tt' }, i.start + '–' + i.end));
+    const recent = v.items.filter((i) => i.date >= C.addDays(t, -7)); // o histórico mais antigo fica no resumo de comparecimento
+    if (!recent.length) { card.append(h('p', { class: 'note' }, 'Nenhum dia convocado.')); return card; }
+    recent.forEach((i) => {
+      const body = h('div', { class: 'body' }, h('span', { class: 'tt' }, i.start + '–' + i.end), i.status !== 'recusado' ? combLine(i.combinado) : null);
       const st = i.status === 'pendente' ? h('span', { class: 'badge info' }, 'aguardando sua resposta')
         : i.status === 'recusado' ? h('span', { class: 'badge erro' }, 'recusado')
         : i.punches.some((p) => p.type === 'saida') ? h('span', { class: 'badge ok' }, '✓ trabalhado · ' + C.fmtDur(i.worked))

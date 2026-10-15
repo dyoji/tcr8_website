@@ -260,3 +260,10 @@ body { min-height: 100vh; }
 .badge.rate-mid { background: var(--warn-soft); color: var(--warn); }
 .badge.rate-bad { background: var(--danger-soft); color: var(--danger); }
 .badge.rate-few { background: var(--sunken); }
+
+/* combinado do freela (diária + adicional) */
+.payline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.paykv { grid-template-columns: auto 1fr; align-items: center; }
+.paykv dd .input { height: 30px; }
+.input.xs { width: 78px; height: 30px; padding: 0 8px; flex: none; }
+.dayrow { grid-template-columns: 1.4fr 1fr 1fr 78px auto; }

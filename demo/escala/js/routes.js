@@ -104,12 +104,15 @@
           addPublished(sh);
         }
         if (db.convocations.some((c) => c.shift_id === sh.id && c.status !== 'recusado')) continue;
-        const c = { id: newId('c'), employee_id: emp.id, shift_id: sh.id, sent_at: nowStamp(), status: 'pendente', answered_at: null, punches: [] };
+        const extra = money(d.extra || 0);
+        const c = { id: newId('c'), employee_id: emp.id, shift_id: sh.id, sent_at: nowStamp(), status: 'pendente', answered_at: null, punches: [],
+          pay: { daily: emp.daily_rate || 0, extra, note: extra ? String(d.extra_note || '').trim().slice(0, 40) : '' } };
         db.convocations.push(c);
         made.push({ conv: c, shift: sh });
       }
       return made;
     }
+    const money = (v) => Math.max(0, Math.min(2000, Math.round((+String(v).replace(',', '.') || 0) * 100) / 100));
     function upsertFreela(store, it) {
       const name = String(it.name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
       if (name.split(' ').length < 2) bad('Informe nome e sobrenome');
@@ -122,10 +125,11 @@
       const reused = !!emp;
       const norm = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
       if (emp && norm(emp.name) !== norm(name)) bad('CPF já cadastrado para ' + emp.name.split(' ')[0] + ' ' + emp.name.split(' ').slice(-1)[0][0] + '.');
-      if (emp) Object.assign(emp, { name, role_id: role, rate_hour: Math.max(0, Math.min(500, +it.rate_hour || emp.rate_hour || 0)), active: true }, apt ? { apt } : {});
+      const daily = it.daily_rate !== undefined && it.daily_rate !== '' ? money(it.daily_rate) : null;
+      if (emp) Object.assign(emp, { name, role_id: role, daily_rate: daily != null ? daily : emp.daily_rate || 0, active: true }, apt ? { apt } : {});
       else {
         emp = { id: newId('f'), store_id: store.id, name, role_id: role, apt: apt || [], contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true,
-          rate_hour: Math.max(0, Math.min(500, +it.rate_hour || 0)), cpf_hash: cpfHash, cpf_mask: C.cpfMask(it.cpf), created_at: nowStamp() };
+          daily_rate: daily || 0, cpf_hash: cpfHash, cpf_mask: C.cpfMask(it.cpf), created_at: nowStamp() };
         db.employees.push(emp);
       }
       return { emp, reused };
@@ -157,10 +161,11 @@
         if (!sh) return null;
         const worked = C.pontoWorked(c, sh.date === C.todayISO(now) ? now : null);
         return { id: c.id, date: sh.date, start: sh.start, end: sh.end, break_min: sh.break_min || 0, status: c.status, sent_at: c.sent_at, punches: c.punches || [],
-          next: C.pontoNext(c, sh, now, db.settings), worked, pay: C.freelaCost(emp, worked) };
+          next: C.pontoNext(c, sh, now, db.settings), worked, combinado: C.freelaPay(c, emp),
+          pay: C.attendanceOf(Object.assign({}, c, { shift: sh }), now) === 'presente' || (c.punches || []).length ? C.freelaPay(c, emp).total : 0 };
       }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
       return {
-        ok: true, now: nowStamp(), name: emp.name, cpf: emp.cpf_mask, role: role.name, rate_hour: emp.rate_hour || 0, reflexos: C.FREELA_REFLEXOS,
+        ok: true, now: nowStamp(), name: emp.name, cpf: emp.cpf_mask, role: role.name, daily_rate: emp.daily_rate || 0, reflexos: C.FREELA_REFLEXOS,
         store: { id: store.id, name: store.name, kind: store.kind }, company: db.company && db.company.name, valid_until: emp.link.valid_until,
         ponto: Object.assign({}, C.PONTO, db.settings.ponto), items,
         // transparência (LGPD art. 9º): a pessoa vê o mesmo histórico que o gestor usa
@@ -500,6 +505,22 @@
         log(emp.store_id, 'Nova convocação para ' + firstName(emp.id) + ' (freela): mais ' + made.length + (made.length === 1 ? ' dia' : ' dias'));
         emit({ type: made.some((x) => weekPublished(emp.store_id, x.shift.date)) ? 'published' : 'draft', store_id: emp.store_id, week: made[0] ? C.weekStart(made[0].shift.date) : null, ids: made.map((x) => x.shift.id), msg: 'Nova convocação para ' + firstName(emp.id) });
         return { count: made.length, valid_until: emp.link && emp.link.valid_until };
+      },
+      // ajusta o combinado de uma convocação (ex.: o freela pediu +R$ 20 para fechar o sábado)
+      'POST /api/freelas/:id/combinado': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        const c = db.convocations.find((x) => x.id === b.conv_id && x.employee_id === emp.id) || bad('Convocação não existe');
+        if (c.status === 'recusado') bad('Essa convocação foi recusada ou cancelada');
+        const sh = db.shifts.find((x) => x.id === c.shift_id);
+        const pay = Object.assign({ daily: emp.daily_rate || 0 }, c.pay);
+        if (b.daily !== undefined) pay.daily = money(b.daily);
+        pay.extra = money(b.extra || 0);
+        pay.note = pay.extra ? String(b.note || '').trim().slice(0, 40) : '';
+        c.pay = pay;
+        const msg = 'Combinado de ' + firstName(emp.id) + (sh ? ' em ' + dl(sh.date) : '') + ': ' + C.money2(pay.daily + pay.extra) + (pay.extra ? ' (diária ' + C.money2(pay.daily) + ' + ' + C.money2(pay.extra) + (pay.note ? ' · ' + pay.note : '') + ')' : '');
+        log(emp.store_id, msg);
+        emit({ type: 'freela', store_id: emp.store_id, week: sh && C.weekStart(sh.date), ids: sh ? [sh.id] : [], msg });
+        return c.pay;
       },
       'POST /api/freelas/:id/link': (id) => {
         const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);

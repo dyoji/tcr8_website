@@ -357,7 +357,14 @@
   // Intermitente recebe ao fim de cada período a hora + 13º proporcional (1/12) + férias proporcionais com 1/3 (1/9).
   const FREELA_REFLEXOS = 1 / 12 + 1 / 9;
   const isFreela = (e) => !!e && e.contract === 'freela';
-  const freelaCost = (e, minutes) => (minutes / 60) * (e.rate_hour || 0) * (1 + FREELA_REFLEXOS);
+  // O freela tem uma diária combinada (fixa por pessoa); cada convocação pode ter um adicional combinado à parte
+  // (ex.: +R$ 20 para fechar o sábado). O valor fica gravado na convocação: mudar a diária depois não mexe no que já foi combinado.
+  function freelaPay(conv, e) {
+    const p = (conv && conv.pay) || {};
+    const daily = p.daily != null ? +p.daily : +((e && e.daily_rate) || 0);
+    const extra = +p.extra || 0;
+    return { daily, extra, note: p.note || '', total: daily + extra };
+  }
 
   // ---------------------------------------------------------------- números da semana
   function weekStats(ctx) {
@@ -369,6 +376,7 @@
     const avgHour = staff.reduce((a, e) => a + hourCost(e, regime), 0) / (staff.length || 1);
     const payroll = staff.reduce((a, e) => a + weeklyCost(e), 0);
     let minutes = 0, sales = 0, needH = 0, metH = 0, openCount = 0, openCost = 0, freelas = 0;
+    const convOf = Object.fromEntries((ctx.convocations || []).filter((c) => c.status !== 'recusado').map((c) => [c.shift_id, c]));
     const perEmp = {}, perDay = {};
     for (const d of days) {
       const ds = shifts.filter((s) => s.date === d);
@@ -382,7 +390,7 @@
         const e = emp[s.employee_id]; if (!e) continue;
         const p = (perEmp[e.id] = perEmp[e.id] || { minutes: 0, days: 0, cost: 0, overtime: 0 });
         p.minutes += w; p.days++;
-        if (isFreela(e)) { const x = freelaCost(e, w); dc += x; p.cost += x; freelas += x; continue; }
+        if (isFreela(e)) { const x = freelaPay(convOf[s.id], e).total * (1 + FREELA_REFLEXOS); dc += x; p.cost += x; freelas += x; continue; }
         dc += (w / 60) * hourCost(e, regime);
       }
       const daySales = curve.reduce((a, x) => a + x.sales, 0);
@@ -552,7 +560,7 @@
     storeWindow, staffWindow, rand, demandCurve, coverage,
     REGIMES, regimeOf, isMinor, weeklyLimit, contractDays, dailyNormal, dailyMax, dailyTarget, suggestShift,
     ABSENCE_TYPES, absenceOn, validate, weekStats, weeklyCost, hourCost, money, money2,
-    isFreela, freelaCost, FREELA_REFLEXOS, PONTO, PUNCH_LABEL, stampMin, pontoNext, pontoWorked,
+    isFreela, freelaPay, FREELA_REFLEXOS, PONTO, PUNCH_LABEL, stampMin, pontoNext, pontoWorked,
     aptos, isApt, ATTEND_DAYS, attendanceOf, freelaAttendance, rateText, rateLevel, dowPlural, JUST_REASONS,
     sha256, cpfDigits, cpfCheck, cpfValid, cpfFormat, cpfMask,
   };

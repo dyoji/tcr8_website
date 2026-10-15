@@ -174,7 +174,7 @@
     const sent = stamp(C.addDays(W, -4), '17:55');
     function freela(id, store_id, name, role_id, cpf9, rate) {
       const cpf = C.cpfCheck(cpf9), t = token();
-      const e = { id, store_id, name, role_id, contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true, rate_hour: rate,
+      const e = { id, store_id, name, role_id, contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true, daily_rate: rate,
         cpf_hash: C.sha256(cpf), cpf_mask: C.cpfMask(cpf), created_at: sent,
         link: { hash: C.sha256(t), created_at: sent, valid_until: C.addDays(W, 6) + 'T23:59:59', revoked: false, demo_token: t } };
       db.employees.push(e);
@@ -193,11 +193,12 @@
       if (pub) pub.shifts.push(clone(sh));
       return sh;
     }
-    function convoca(e, sh, status, at, punches) {
+    function convoca(e, sh, status, at, punches, extra, note) {
       if (!sh) return;
-      db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: at, status, answered_at: status === 'pendente' ? null : at, punches: punches || [] });
+      db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: at, status, answered_at: status === 'pendente' ? null : at, punches: punches || [],
+        pay: { daily: e.daily_rate, extra: extra || 0, note: extra ? note || '' : '' } });
     }
-    const ana = freela('f1', 'SHO', 'Ana Beatriz Freitas', 'ven', '274185963', 15);
+    const ana = freela('f1', 'SHO', 'Ana Beatriz Freitas', 'ven', '274185963', 150);
     // um dia que já passou, com o ponto completo
     const past = [0, 1, 2, 3, 4].map((i) => C.addDays(W, i)).find((d) => d < today && C.staffWindow(db.stores[0], d));
     if (past) {
@@ -211,9 +212,9 @@
       ]);
     }
     convoca(ana, turno(ana, today, 310), 'aceito', sent);                       // hoje, no fim do dia
-    if (C.addDays(W, 5) > today) convoca(ana, turno(ana, C.addDays(W, 5), 490), 'aceito', stamp(today, '08:30')); // chamada em cima da hora: alerta do art. 452-A
+    if (C.addDays(W, 5) > today) convoca(ana, turno(ana, C.addDays(W, 5), 490), 'aceito', stamp(today, '08:30'), null, 20, 'sábado'); // em cima da hora (alerta do art. 452-A) e com +R$ 20 para fechar o sábado
     if (C.addDays(W, 6) > today) convoca(ana, turno(ana, C.addDays(W, 6), 375), 'pendente', stamp(today, '08:30')); // menos de 3 dias: alerta
-    const diego = freela('f2', 'KID', 'Diego Martins', 'mon', '853902174', 14);
+    const diego = freela('f2', 'KID', 'Diego Martins', 'mon', '853902174', 140);
     if (C.addDays(W, 6) > today) convoca(diego, turno(diego, C.addDays(W, 6), 490), 'aceito', sent);
 
     // aptidões: em que outros cargos cada um pode trabalhar
@@ -254,33 +255,35 @@
             }
             punches.push({ type: 'saida', at: at(date, b + 2, e.id + date + 's'), nsr: ++db.nsr });
           }
-          db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: sentAt, status: 'aceito', answered_at: sentAt, punches });
+          const extra = p.extra && C.dow(date) === p.extraDow ? p.extra : 0;
+          db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: sentAt, status: 'aceito', answered_at: sentAt, punches,
+            pay: { daily: e.daily_rate, extra, note: extra ? (p.extraDow === 0 ? 'domingo' : 'sábado') : '' } });
         }
       }
       (extra || []).forEach((x) => {
         const date = C.addDays(W, x.week * 7 + (x.d === 0 ? 6 : x.d - 1));
         const sh = pastShift(e, date, 375); if (!sh) return;
-        const c = { id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: stamp(C.addDays(date, -4), '18:10'), status: 'aceito', answered_at: stamp(C.addDays(date, -4), '19:02'), punches: [] };
+        const c = { id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: stamp(C.addDays(date, -4), '18:10'), status: 'aceito', answered_at: stamp(C.addDays(date, -4), '19:02'), punches: [], pay: { daily: e.daily_rate, extra: 0, note: '' } };
         if (x.kind === 'recusa') { c.status = 'recusado'; applyBoth(sh, { employee_id: null }); }
         if (x.kind === 'justificada') { c.attendance = 'justificada'; c.attendance_reason = 'atestado'; c.attendance_by = stamp(date, '21:00'); }
         db.convocations.push(c);
       });
     }
     const roster = (id, store, name, role, apt, cpf9, rate, withLink) => { const e = freela(id, store, name, role, cpf9, rate); e.apt = apt; if (!withLink) e.link = null; return e; };
-    history(ana, [{ d: 6, p: 1, len: 490 }, { d: 5, p: 0.9 }]);
+    history(ana, [{ d: 6, p: 1, len: 490, extra: 20, extraDow: 6 }, { d: 5, p: 0.9 }]);
     history(diego, [{ d: 6, p: 0.9, len: 490 }, { d: 0, p: 0.85 }]);
-    const bianca = roster('f3', 'SHO', 'Bianca Rocha', 'ven', ['cx'], '418273650', 15);
-    history(bianca, [{ d: 6, p: 0.95, len: 490 }, { d: 0, p: 0.3 }, { d: 3, p: 1 }]);
-    const julia = roster('f4', 'SHO', 'Júlia Andrade', 'ven', ['est'], '629184037', 14, true);
+    const bianca = roster('f3', 'SHO', 'Bianca Rocha', 'ven', ['cx'], '418273650', 140);
+    history(bianca, [{ d: 6, p: 0.95, len: 490, extra: 20, extraDow: 6 }, { d: 0, p: 0.3 }, { d: 3, p: 1 }]);
+    const julia = roster('f4', 'SHO', 'Júlia Andrade', 'ven', ['est'], '629184037', 130, true);
     history(julia, [{ d: 6, p: 0.25, len: 490 }, { d: 5, p: 0.95 }]);
-    const rafael = roster('f5', 'SHO', 'Rafael Lima', 'cx', ['ven'], '730295184', 16);
-    history(rafael, [{ d: 6, p: 1, len: 490 }, { d: 0, p: 1 }, { d: 2, p: 1 }]);
-    roster('f6', 'SHO', 'Thiago Nunes', 'est', [], '841306295', 13); // novo, sem histórico
-    const larissa = roster('f7', 'SHO', 'Larissa Gomes', 'ven', [], '952417306', 15);
+    const rafael = roster('f5', 'SHO', 'Rafael Lima', 'cx', ['ven'], '730295184', 160);
+    history(rafael, [{ d: 6, p: 1, len: 490 }, { d: 0, p: 1, extra: 30, extraDow: 0 }, { d: 2, p: 1 }]);
+    roster('f6', 'SHO', 'Thiago Nunes', 'est', [], '841306295', 120); // novo, sem histórico
+    const larissa = roster('f7', 'SHO', 'Larissa Gomes', 'ven', [], '952417306', 150);
     history(larissa, [{ d: 6, p: 0.95, len: 490 }, { d: 0, p: 0.9 }], [{ week: -3, d: 6, kind: 'recusa' }, { week: -2, d: 0, kind: 'justificada' }]);
-    const patricia = roster('f8', 'KID', 'Patrícia Souza', 'mon', ['rec'], '163528417', 14, true);
+    const patricia = roster('f8', 'KID', 'Patrícia Souza', 'mon', ['rec'], '163528417', 130, true);
     history(patricia, [{ d: 0, p: 0.25, len: 490 }, { d: 6, p: 0.85, len: 490 }]);
-    const bruno = roster('f9', 'KID', 'Bruno Teixeira', 'rec', ['mon'], '274639528', 14);
+    const bruno = roster('f9', 'KID', 'Bruno Teixeira', 'rec', ['mon'], '274639528', 145);
     history(bruno, [{ d: 6, p: 1, len: 490 }, { d: 0, p: 1, len: 490 }]);
     // convocados desta semana com histórico ruim naquele dia: o painel avisa
     if (C.addDays(W, 5) > today) convoca(julia, turno(julia, C.addDays(W, 5), 490), 'aceito', sent);

@@ -47,3 +47,6 @@ body { min-height: 100vh; }
 .dead { text-align: center; padding: 36px 18px; display: grid; gap: 10px; justify-items: center; }
 .dead .ic { width: 40px; height: 40px; color: var(--muted); }
 .dead h1 { margin: 0; font-size: 22px; }
+.comb { font-size: 14px; color: var(--ink-2); }
+.comb b { font-family: var(--mono); color: var(--ink); }
+.comb small { color: var(--muted); }
