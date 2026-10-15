@@ -39,7 +39,9 @@ function events_of($evf)
 	return is_array($e) ? $e : ['version' => 0, 'events' => []];
 }
 
-if ($op === 'ping') out(200, ['ok' => true, 'mode' => 'php']);
+// hora do servidor em ms: o ponto do freela usa este relógio, não o do celular
+$time = (int)round(microtime(true) * 1000);
+if ($op === 'ping') out(200, ['ok' => true, 'mode' => 'php', 'time' => $time]);
 
 // leitura com trava compartilhada: versão e db saem do mesmo instante
 $lock = fopen("$dir/$sala.lock", 'c');
@@ -52,7 +54,7 @@ if ($op === 'since') {
 	$v = (int)($_GET['v'] ?? 0);
 	$list = array_values(array_filter($e['events'], fn($x) => ($x['version'] ?? 0) > $v));
 	$oldest = $e['events'] ? (int)($e['events'][0]['version'] ?? 0) : $e['version'];
-	out(200, ['version' => $e['version'], 'events' => $list, 'gap' => $v > 0 && $v < $oldest - 1]);
+	out(200, ['version' => $e['version'], 'events' => $list, 'gap' => $v > 0 && $v < $oldest - 1, 'time' => $time]);
 }
 
 if ($op === 'get') {
@@ -60,7 +62,7 @@ if ($op === 'get') {
 	$e = events_of($evf);
 	$raw = is_file($dbf) ? (string)file_get_contents($dbf) : 'null';
 	flock($lock, LOCK_UN);
-	out(200, '{"version":' . (int)$e['version'] . ',"db":' . $raw . '}');
+	out(200, '{"version":' . (int)$e['version'] . ',"time":' . $time . ',"db":' . $raw . '}');
 }
 
 if ($op === 'put') {
@@ -90,7 +92,7 @@ if ($op === 'put') {
 	}
 	flock($lock, LOCK_UN);
 	if (!$ok) out(500, ['error' => 'Falha ao gravar']);
-	out(200, ['version' => $version]);
+	out(200, ['version' => $version, 'time' => $time]);
 }
 
 out(404, ['error' => 'Operação desconhecida']);

@@ -15,7 +15,8 @@
     const regime = C.regimeOf(settings);
     const rules = (settings && settings.rules) || {};
     const days = C.weekDays(ws), sun = days[6];
-    const emps = employees.filter((e) => e.active !== false);
+    const emps = employees.filter((e) => e.active !== false && e.contract !== 'freela'); // freela entra por convocação, não pelo gerador
+    const fixed = ctx.fixed || []; // turnos que ficam (freelas convocados) e já contam na cobertura
     const keyIds = new Set(store.key_required ? emps.filter((e) => (e.skills || []).includes('chave')).map((e) => e.id) : []);
 
     // histórico (semanas anteriores) para descanso, 7º dia e domingos
@@ -118,7 +119,7 @@
     for (const x of info) {
       if (!x.sw) continue;
       const d = x.date, sw = x.sw, dayBase = C.diffDays('2000-01-03', d) * 1440;
-      const samples = x.curve.map((c) => ({ m: c.h * 60 + 30, need: c.need, have: 0, h: c.h }));
+      const samples = x.curve.map((c) => ({ m: c.h * 60 + 30, need: c.need, have: fixed.filter((f) => f.date === x.date && C.presentAt(f, c.h * 60 + 30)).length, h: c.h }));
       const ordered = emps.filter((e) => plan[e.id].has(d))
         .sort((a, b) => (keyIds.has(b.id) - keyIds.has(a.id)) || (minutesPlan[b.id][d] - minutesPlan[a.id][d]) || (C.rand(a.id + d) - C.rand(b.id + d)));
       let openerDone = false, closerDone = false;

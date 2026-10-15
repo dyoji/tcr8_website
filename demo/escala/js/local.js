@@ -11,8 +11,11 @@
   const url = (op, extra) => 'api.php?op=' + op + '&sala=' + encodeURIComponent(sala) + (extra || '');
   const copy = (x) => JSON.parse(JSON.stringify(x));
 
+  // relógio das regras = hora do servidor (o ponto não pode depender do relógio do celular)
+  function syncClock(d) { if (d && d.time) { const off = d.time - Date.now(); R.setClock(() => new Date(Date.now() + off)); } }
   async function json(res) {
     const d = await res.json().catch(() => ({}));
+    syncClock(d);
     if (!res.ok) { const e = new Error(d.error || 'Falha na requisição'); e.status = res.status; throw e; }
     return d;
   }

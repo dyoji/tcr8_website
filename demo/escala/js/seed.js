@@ -167,6 +167,55 @@
     }
     if (kidOpen && claimer) db.requests.push({ id: 'r3', type: 'pegar', store_id: 'KID', employee_id: claimer, shift_id: kidOpen.id, note: 'Posso cobrir', status: 'pendente', created_at: stamp(today, '07:58') });
 
+    // freelas intermitentes de exemplo, com link de ponto já gerado (demo_token só existe no demo)
+    db.convocations = []; db.nsr = 0;
+    const reserved = new Set(db.requests.map((r) => r.shift_id).filter(Boolean));
+    const token = () => { let t = ''; while (t.length < 32) t += Math.random().toString(36).slice(2); return t.slice(0, 32); };
+    const sent = stamp(C.addDays(W, -4), '17:55');
+    function freela(id, store_id, name, role_id, cpf9, rate) {
+      const cpf = C.cpfCheck(cpf9), t = token();
+      const e = { id, store_id, name, role_id, contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true, rate_hour: rate,
+        cpf_hash: C.sha256(cpf), cpf_mask: C.cpfMask(cpf), created_at: sent,
+        link: { hash: C.sha256(t), created_at: sent, valid_until: C.addDays(W, 6) + 'T23:59:59', revoked: false, demo_token: t } };
+      db.employees.push(e);
+      return e;
+    }
+    // usa o turno aberto do dia (se houver e ninguém pediu) ou cria um que termina no fechamento
+    function turno(e, date, len) {
+      const sw = C.staffWindow(db.stores.find((x) => x.id === e.store_id), date);
+      if (!sw) return null;
+      let sh = db.shifts.find((x) => x.store_id === e.store_id && x.date === date && !x.employee_id && !reserved.has(x.id));
+      if (sh) { applyBoth(sh, { employee_id: e.id, role_id: e.role_id }); return sh; }
+      const wk = C.maxWorkedIn(len), br = C.breakFor(wk);
+      sh = { id: newId(), store_id: e.store_id, employee_id: e.id, date, start: C.fromMin(sw.end - wk - br), end: C.fromMin(sw.end), break_min: br, role_id: e.role_id };
+      db.shifts.push(sh);
+      const pub = db.publications[e.store_id + '|' + C.weekStart(date)];
+      if (pub) pub.shifts.push(clone(sh));
+      return sh;
+    }
+    function convoca(e, sh, status, at, punches) {
+      if (!sh) return;
+      db.convocations.push({ id: 'c' + (db.convocations.length + 1), employee_id: e.id, shift_id: sh.id, sent_at: at, status, answered_at: status === 'pendente' ? null : at, punches: punches || [] });
+    }
+    const ana = freela('f1', 'SHO', 'Ana Beatriz Freitas', 'ven', '274185963', 15);
+    // um dia que já passou, com o ponto completo
+    const past = [0, 1, 2, 3, 4].map((i) => C.addDays(W, i)).find((d) => d < today && C.staffWindow(db.stores[0], d));
+    if (past) {
+      const sh = turno(ana, past, 375);
+      const [a, b] = C.span(sh), bs = a + 180, p = (m, sec) => past + 'T' + C.fromMin(m) + ':' + C.pad(sec) ;
+      convoca(ana, sh, 'aceito', sent, [
+        { type: 'entrada', at: p(a + 2, 14), nsr: ++db.nsr },
+        { type: 'intervalo_ini', at: p(bs, 2), nsr: ++db.nsr },
+        { type: 'intervalo_fim', at: p(bs + sh.break_min + 1, 40), nsr: ++db.nsr },
+        { type: 'saida', at: p(b + 3, 9), nsr: ++db.nsr },
+      ]);
+    }
+    convoca(ana, turno(ana, today, 310), 'aceito', sent);                       // hoje, no fim do dia
+    if (C.addDays(W, 5) > today) convoca(ana, turno(ana, C.addDays(W, 5), 490), 'aceito', stamp(today, '08:30')); // chamada em cima da hora: alerta do art. 452-A
+    if (C.addDays(W, 6) > today) convoca(ana, turno(ana, C.addDays(W, 6), 375), 'pendente', stamp(today, '08:30')); // menos de 3 dias: alerta
+    const diego = freela('f2', 'KID', 'Diego Martins', 'mon', '853902174', 14);
+    if (C.addDays(W, 6) > today) convoca(diego, turno(diego, C.addDays(W, 6), 490), 'aceito', sent);
+
     // quem ainda não confirmou a leitura da semana atual
     ['e3', 'e7', 'e8', 'e12', 'e19', 'e20'].forEach((id) => { const r = db.receipts[emp(id).store_id + '|' + W]; if (r) delete r[id]; });
 

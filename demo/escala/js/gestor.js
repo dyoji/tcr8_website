@@ -46,10 +46,14 @@
     D.we = D.days[6];
     D.roles = Object.fromEntries(d.roles.map((r) => [r.id, r]));
     D.emps = d.employees;
+    D.staff = d.employees.filter((e) => !C.isFreela(e));
+    D.freelas = d.employees.filter(C.isFreela);
     D.empById = Object.fromEntries(d.employees.map((e) => [e.id, e]));
+    D.convs = d.convocations || [];
+    D.convByShift = Object.fromEntries(D.convs.filter((c) => c.status !== 'recusado').map((c) => [c.shift_id, c]));
     D.week = d.shifts.filter((s) => s.date >= S.week && s.date <= D.we);
     D.regime = C.regimeOf(d.settings);
-    D.issues = C.validate({ settings: d.settings, store: d.store, employees: d.employees, shifts: d.shifts, absences: d.absences, weekStart: S.week });
+    D.issues = C.validate({ settings: d.settings, store: d.store, employees: d.employees, shifts: d.shifts, absences: d.absences, weekStart: S.week, convocations: D.convs });
     D.issues.forEach((i) => { i.just = d.justifications[i.key] || null; });
     D.stats = C.weekStats({ store: d.store, employees: d.employees, shifts: D.week, weekStart: S.week, settings: d.settings });
     const rank = { erro: 3, alerta: 2, info: 1 };
@@ -120,32 +124,34 @@
 
   function renderKpis() {
     const st = D.stats, d = S.data;
-    const limit = D.emps.reduce((a, e) => a + C.weeklyLimit(e, D.regime), 0);
+    const limit = D.staff.reduce((a, e) => a + C.weeklyLimit(e, D.regime), 0);
     const target = d.settings.labor_target_pct;
     const errs = D.issues.filter((i) => i.sev === 'erro' && !i.just).length;
     const alerts = D.issues.filter((i) => i.sev === 'alerta' && !i.just).length;
-    const seen = Object.keys(d.receipts).filter((id) => D.empById[id]).length;
+    const seen = Object.keys(d.receipts).filter((id) => D.empById[id] && !C.isFreela(D.empById[id])).length;
+    const nStaff = D.staff.length;
     const short = Object.values(st.perDay).reduce((a, x) => a + x.cov.reduce((y, c) => y + Math.max(0, c.need - c.have - c.open), 0), 0);
     const kpi = (k, v, dsc, cls, meter) => h('div', { class: 'kpi ' + (cls || '') },
       h('span', { class: 'k' }, k), h('span', { class: 'v' }, v), dsc ? h('span', { class: 'd' }, dsc) : null,
       meter != null ? h('div', { class: 'meter' }, h('i', { style: { width: Math.max(0, Math.min(100, meter)) + '%' } })) : null);
     const pub = d.publication.published;
-    const staffMin = Object.values(st.perEmp).reduce((a, p) => a + p.minutes, 0);
+    const staffMin = D.staff.reduce((a, e) => a + ((st.perEmp[e.id] || {}).minutes || 0), 0);
+    const freelaMin = D.freelas.reduce((a, e) => a + ((st.perEmp[e.id] || {}).minutes || 0), 0);
     const openMin = D.week.filter((s) => !s.employee_id).reduce((a, s) => a + C.worked(s), 0);
     $('kpis').replaceChildren(
-      kpi('Horas da equipe', [C.fmtDur(staffMin), ' ', h('small', null, '/ ' + C.fmtDur(limit))], openMin ? '+ ' + C.fmtDur(openMin) + ' em ' + st.open + (st.open > 1 ? ' turnos abertos' : ' turno aberto') : 'soma dos contratos na regra ' + D.regime.short, staffMin > limit ? 'warn' : '', (staffMin / limit) * 100),
-      kpi('Custo da equipe', C.money(st.cost), (st.overtime + st.openCost > 1 ? 'folha + ' + C.money(st.overtime + st.openCost) + ' de hora extra' : 'folha da semana com encargos') + ' · ' + C.money(st.hour_cost) + '/h'),
+      kpi('Horas da equipe', [C.fmtDur(staffMin), ' ', h('small', null, '/ ' + C.fmtDur(limit))], [freelaMin ? '+ ' + C.fmtDur(freelaMin) + ' de freela' : '', openMin ? '+ ' + C.fmtDur(openMin) + ' em aberto' : ''].filter(Boolean).join(' · ') || 'soma dos contratos na regra ' + D.regime.short, staffMin > limit ? 'warn' : '', (staffMin / limit) * 100),
+      kpi('Custo da equipe', C.money(st.cost), (['folha', st.overtime + st.openCost > 1 ? C.money(st.overtime + st.openCost) + ' de hora extra' : '', st.freelas > 1 ? C.money(st.freelas) + ' de freelas' : ''].filter(Boolean).join(' + ')) + ' · ' + C.money(st.hour_cost) + '/h'),
       kpi('Custo ÷ venda prevista', pct(st.cost_pct), 'meta ' + target + '% · venda ' + C.money(st.sales), st.cost_pct > target * 1.1 ? 'bad' : st.cost_pct > target ? 'warn' : 'good', (st.cost_pct / (target * 1.5)) * 100),
       kpi('Cobertura do movimento', pct(st.coverage_pct), short ? short + ' pessoa-hora descoberta' + (short > 1 ? 's' : '') : 'tudo coberto', st.coverage_pct < 90 ? 'bad' : st.coverage_pct < 98 ? 'warn' : 'good', st.coverage_pct),
       kpi('Apontamentos', [h('span', { style: { color: errs ? 'var(--danger)' : '' } }, errs), h('small', null, errs === 1 ? ' erro · ' : ' erros · '), h('span', { style: { color: alerts ? 'var(--warn)' : '' } }, alerts), h('small', null, alerts === 1 ? ' alerta' : ' alertas')], errs ? 'corrija ou justifique antes de publicar' : 'nenhum erro da CLT', errs ? 'bad' : alerts ? '' : 'good'),
-      kpi('Viram a escala', pub ? [seen, ' ', h('small', null, '/ ' + D.emps.length)] : '—', pub ? (seen >= D.emps.length ? 'todo mundo confirmou' : D.emps.length - seen + ' ainda não confirmaram') : 'publique para a equipe ver', pub && seen < D.emps.length ? 'warn' : pub ? 'good' : '', pub ? (seen / D.emps.length) * 100 : null)
+      kpi('Viram a escala', pub ? [seen, ' ', h('small', null, '/ ' + nStaff)] : '—', pub ? (seen >= nStaff ? 'todo mundo confirmou' : nStaff - seen + ' ainda não confirmaram') : 'publique para a equipe ver', pub && seen < nStaff ? 'warn' : pub ? 'good' : '', pub ? (seen / nStaff) * 100 : null)
     );
   }
 
   function renderGrid() {
     const g = $('grid');
     const d = S.data, store = d.store, t = today();
-    const nodes = [h('div', { class: 'gh corner' }, 'Equipe · ' + D.emps.length)];
+    const nodes = [h('div', { class: 'gh corner' }, 'Equipe · ' + D.staff.length + (D.freelas.length ? ' + ' + D.freelas.length + ' freela' + (D.freelas.length > 1 ? 's' : '') : ''))];
     D.days.forEach((day) => {
       const win = C.storeWindow(store, day), hol = C.holiday(day), pd = D.stats.perDay[day];
       const max = Math.max(1, ...pd.cov.map((c) => Math.max(c.need, c.have + c.open)));
@@ -172,11 +178,16 @@
 
     // pessoas por função
     d.roles.forEach((role) => {
-      const list = D.emps.filter((e) => e.role_id === role.id);
+      const list = D.staff.filter((e) => e.role_id === role.id);
       if (!list.length) return;
       nodes.push(h('div', { class: 'grp' }, h('span', { class: 'dot', style: { background: role.color } }), role.name, h('span', null, '· ' + list.length)));
       list.forEach((e) => { nodes.push(personCell(e)); D.days.forEach((day) => nodes.push(cell(e, day))); nodes.push(totalCell(e)); });
     });
+
+    // freelas intermitentes (convocados pelo link)
+    nodes.push(h('div', { class: 'grp freela' }, icon('link'), 'Freelas · intermitentes', h('span', null, '· ' + D.freelas.length),
+      h('button', { class: 'btn sm ghost', onclick: (ev) => { ev.stopPropagation(); freelaForm(); } }, icon('userplus'), 'Convocar freela')));
+    D.freelas.forEach((e) => { nodes.push(freelaCell(e)); D.days.forEach((day) => nodes.push(cell(e, day))); nodes.push(freelaTotal(e)); });
 
     // rodapé
     nodes.push(h('div', { class: 'foot label' }, 'Pessoas por hora'));
@@ -207,6 +218,212 @@
       S.data.publication.published ? h('span', { class: seen ? 'seen' : 'unseen', title: seen ? 'Viu a escala ' + when(seen) : 'Ainda não confirmou que viu a escala' }, icon(seen ? 'check' : 'eye')) : null);
   }
 
+  // ------------------------------------------------------------ freela: linha, link e convocação
+  const stampNow = () => { const d = new Date(); return C.todayISO(d) + 'T' + C.pad(d.getHours()) + ':' + C.pad(d.getMinutes()) + ':' + C.pad(d.getSeconds()); };
+  const dl = (d) => C.DOW_SHORT[C.dow(d)] + ' ' + C.fmtDay(d);
+  function linkState(e) {
+    const l = e.link;
+    if (!l) return { on: false, txt: 'sem link' };
+    if (l.revoked) return { on: false, txt: 'link cancelado' };
+    if (stampNow() > l.valid_until) return { on: false, txt: 'link expirado' };
+    return { on: true, txt: 'link até ' + C.fmtDay(l.valid_until.slice(0, 10)) };
+  }
+  function newToken() {
+    const b = new Uint8Array(24);
+    crypto.getRandomValues(b);
+    return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  const pontoUrl = (t) => new URL(UI.link('ponto.html', { t }), location.href).href;
+  const linkKey = (id) => 'link.' + (UI.sala || 'demo') + '.' + id;
+  // O servidor só guarda o hash: o link completo fica neste navegador (ou vem do token dos freelas de exemplo).
+  function knownLink(e) {
+    if (!e.link) return null;
+    const saved = UI.store.get(linkKey(e.id), null);
+    if (saved && saved.created_at === e.link.created_at) return saved.url;
+    return e.link.demo_token ? pontoUrl(e.link.demo_token) : null;
+  }
+  function convStatus(c) {
+    if (c.canceled) return h('span', { class: 'badge' }, 'cancelada');
+    if (c.status === 'recusado') return h('span', { class: 'badge erro' }, 'recusou');
+    if (c.status === 'pendente') return h('span', { class: 'badge info' }, 'aguardando aceite');
+    const P = c.punches || [];
+    if (P.some((p) => p.type === 'saida')) return h('span', { class: 'badge ok' }, icon('check'), 'concluído');
+    if (P.some((p) => p.type === 'entrada')) return h('span', { class: 'badge lime' }, 'trabalhando');
+    return h('span', { class: 'badge ok' }, 'aceito');
+  }
+  function freelaCell(e) {
+    const ls = linkState(e);
+    return h('div', { class: 'person freela', onclick: () => openFreela(e), title: 'Convocações, ponto e link de ' + e.name },
+      h('span', { class: 'av freela', '--rc': (D.roles[e.role_id] || {}).color }, UI.initials(e.name)),
+      h('div', { class: 'pinfo' }, h('b', null, e.name), h('small', null, 'Freela · ' + C.money2(e.rate_hour || 0) + '/h · ' + ls.txt)),
+      h('span', { class: 'lk' + (ls.on ? ' on' : ''), title: ls.txt }, icon('link')));
+  }
+  function freelaTotal(e) {
+    const p = D.stats.perEmp[e.id] || { minutes: 0, days: 0, cost: 0 };
+    return h('div', { class: 'total last', title: 'Valor estimado com 13º e férias + 1/3 proporcionais' },
+      h('span', { class: 'hrs' }, C.fmtDur(p.minutes)), h('small', null, p.days + 'd · ' + C.money(p.cost)));
+  }
+
+  // Mostra o link pronto para mandar (copiar, WhatsApp, abrir).
+  function shareLink(emp, url, validUntil, phone) {
+    const first = UI.first(emp.name);
+    const convs = (S.data.convocations || []).filter((c) => c.employee_id === emp.id && c.status !== 'recusado' && c.shift && c.shift.date >= today());
+    const dias = convs.map((c) => dl(c.shift.date) + ' ' + c.shift.start + '–' + c.shift.end).join('; ');
+    const text = 'Olá, ' + first + '! A ' + S.data.store.name + ' está te convocando' + (dias ? ' para: ' + dias : '') + '. Aceite e bata o ponto por este link pessoal (vale até ' + C.fmtDay(validUntil.slice(0, 10)) + '): ' + url;
+    const digits = String(phone || '').replace(/\D/g, '');
+    const wa = 'https://wa.me/' + (digits ? (digits.length <= 11 ? '55' : '') + digits : '') + '?text=' + encodeURIComponent(text);
+    const inp = h('input', { class: 'input mono', readonly: true, value: url, onclick: (ev) => ev.target.select() });
+    const copy = (txt, msg) => { (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast(msg), () => { inp.select(); document.execCommand('copy'); toast(msg); }); };
+    UI.drawer('Link de ponto · ' + first, [
+      h('div', { class: 'callout' }, h('b', null, 'Convocação pronta'), h('span', null, 'É por este link que ' + first + ' vê a escala, aceita cada dia e bate o ponto. Vale até ' + dl(validUntil.slice(0, 10)) + ' 23:59 e só funciona para esta pessoa.')),
+      h('div', { class: 'linkbox' }, inp, h('button', { class: 'btn', onclick: () => copy(url, 'Link copiado') }, icon('copy'), 'Copiar')),
+      h('div', { class: 'field' }, h('span', null, 'Mensagem'), h('div', { class: 'preview', style: { whiteSpace: 'normal', fontFamily: 'var(--font)' } }, text)),
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'O sistema guarda só um código embaralhado do link (hash). Se você perder o link, gere outro — o antigo deixa de valer.'),
+    ], [
+      h('a', { class: 'btn lime', href: wa, target: '_blank', rel: 'noopener' }, icon('send'), 'Enviar no WhatsApp'),
+      h('button', { class: 'btn', onclick: () => copy(text, 'Mensagem copiada') }, icon('copy'), 'Copiar mensagem'),
+      h('a', { class: 'btn ghost', href: url, target: '_blank', rel: 'noopener' }, 'Abrir o link'),
+    ]);
+  }
+
+  async function newLink(emp) {
+    const token = newToken();
+    try {
+      S.selfUntil = Date.now() + 1500;
+      const r = await api.post('/api/freelas/' + emp.id + '/link', { token });
+      UI.store.set(linkKey(emp.id), { url: pontoUrl(token), created_at: r.link_created_at });
+      await load();
+      shareLink(D.empById[emp.id] || emp, pontoUrl(token), r.valid_until);
+    } catch (e) { toast(e.message, 'erro'); }
+  }
+
+  function openFreela(e) {
+    const convs = D.convs.filter((c) => c.employee_id === e.id).sort((a, b) => ((a.shift || {}).date || '').localeCompare((b.shift || {}).date || ''));
+    const ls = linkState(e), url = knownLink(e), now = new Date();
+    let totMin = 0, totBase = 0;
+    const rows = convs.map((c) => {
+      const sh = c.shift || {};
+      const isToday = sh.date === C.todayISO(now);
+      const min = C.pontoWorked(c, isToday ? now : null);
+      const base = (min / 60) * (e.rate_hour || 0);
+      totMin += min; totBase += base;
+      const P = c.punches || [];
+      return h('div', { class: 'conv' },
+        h('div', { class: 'ch' }, h('b', null, (sh.date ? dl(sh.date) : '?') + ' · ' + sh.start + '–' + sh.end), convStatus(c)),
+        h('div', { class: 'muted', style: { fontSize: '12.5px' } }, 'Convocação enviada ' + when(c.sent_at) + (c.answered_at && !c.canceled ? ' · respondeu ' + when(c.answered_at) : '')),
+        P.length ? h('div', { class: 'punches' }, P.map((p) => h('span', { class: 'pch', title: 'NSR ' + p.nsr }, C.PUNCH_LABEL[p.type] + ' ', h('b', { class: 'mono' }, p.at.slice(11, 16)), p.late ? h('em', null, ' +' + p.late + ' min') : null)))
+          : c.status === 'aceito' ? h('div', { class: 'muted', style: { fontSize: '12.5px' } }, 'Sem ponto ainda.') : null,
+        min ? h('div', { class: 'mono', style: { fontSize: '12.5px' } }, C.fmtDur(min) + ' · ' + C.money2(base) + ' + ' + C.money2(base * C.FREELA_REFLEXOS) + ' de reflexos') : null,
+        !P.length && c.status !== 'recusado' && sh.date >= today() ? h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/cancel', { conv_id: c.id }); }, 'Convocação cancelada — o turno voltou a ficar aberto').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar convocação')) : null);
+    });
+    UI.drawer(e.name, [
+      h('div', { class: 'row' }, h('span', { class: 'av freela', '--rc': (D.roles[e.role_id] || {}).color, style: { width: '46px', height: '46px', fontSize: '14px' } }, UI.initials(e.name)),
+        h('div', null, h('b', null, e.name), h('div', { class: 'muted' }, 'Freela intermitente · ' + (D.roles[e.role_id] || {}).name + ' · CPF ' + (e.cpf_mask || '—') + ' · ' + C.money2(e.rate_hour || 0) + '/h'))),
+      h('div', { class: 'linkcard' + (ls.on ? ' on' : '') }, icon(ls.on ? 'link' : 'lock'),
+        h('div', { class: 'grow' }, h('b', null, ls.on ? 'Link de ponto válido' : 'Link ' + ls.txt.replace('link ', '')), h('small', { class: 'muted' }, ls.on ? 'até ' + dl(e.link.valid_until.slice(0, 10)) + ' 23:59' + (url ? '' : ' · o link completo ficou no aparelho que gerou') : 'Gere um novo para mandar de novo.')),
+        url && ls.on ? h('button', { class: 'btn sm', onclick: () => shareLink(e, url, e.link.valid_until) }, icon('send'), 'Mandar') : null),
+      h('div', { class: 'field' }, h('span', null, 'Convocações'), rows.length ? h('div', { class: 'list-plain' }, rows) : h('div', { class: 'muted' }, 'Nenhuma convocação.')),
+      totMin ? h('div', { class: 'sumline' }, h('span', { class: 'grow' }, 'A pagar (' + C.fmtDur(totMin) + ')'), h('b', { class: 'mono' }, C.money2(totBase * (1 + C.FREELA_REFLEXOS)))) : null,
+      h('p', { class: 'muted', style: { margin: 0, fontSize: '12.5px' } }, 'Intermitente recebe ao fim de cada período as horas + 13º e férias com 1/3 proporcionais (CLT art. 452-A §6º); FGTS e INSS recolhidos pela empresa. Atraso de até 5 min por marcação não conta (art. 58 §1º).'),
+    ], [
+      h('button', { class: 'btn primary', onclick: () => freelaForm(e) }, icon('plus'), 'Convocar mais dias'),
+      h('button', { class: 'btn', onclick: () => newLink(e) }, icon('link'), 'Gerar novo link'),
+      h('span', { class: 'spacer' }),
+      ls.on ? h('button', { class: 'btn danger', onclick: () => mutate(async () => { await api.post('/api/freelas/' + e.id + '/revoke'); }, 'Link cancelado — não abre mais').then(() => openFreela(D.empById[e.id] || e)) }, 'Cancelar link') : null,
+    ]);
+  }
+
+  // Convocar freela: novo (nome + CPF) ou existente; dias = turnos abertos marcados + dias avulsos.
+  async function freelaForm(existing, day) {
+    const store = S.data.store;
+    let next = null;
+    try { next = await api.get('/api/state?store=' + S.storeId + '&week=' + C.addDays(S.week, 7)); } catch (e) { /* só esta semana */ }
+    const seen = new Set();
+    const pool = S.data.shifts.concat(next ? next.shifts : []).filter((x) => !x.employee_id && x.date >= today() && !seen.has(x.id) && seen.add(x.id))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+    const f = {
+      name: h('input', { class: 'input', placeholder: 'Nome e sobrenome', maxlength: 60, autocomplete: 'off' }),
+      cpf: h('input', { class: 'input mono', placeholder: '000.000.000-00', inputmode: 'numeric', maxlength: 14, autocomplete: 'off' }),
+      role: h('select', { class: 'input' }, S.data.roles.map((r) => h('option', { value: r.id, selected: r.id === (existing ? existing.role_id : store.default_role) }, r.name))),
+      rate: h('input', { class: 'input mono', type: 'number', min: 0, step: 0.5, value: existing ? existing.rate_hour : 15 }),
+      phone: h('input', { class: 'input mono', placeholder: '(11) 90000-0000', inputmode: 'tel', maxlength: 16, autocomplete: 'off' }),
+    };
+    f.cpf.addEventListener('input', () => { const d = C.cpfDigits(f.cpf.value).slice(0, 11); f.cpf.value = d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2'); f.cpf.classList.toggle('bad', d.length === 11 && !C.cpfValid(d)); });
+    const checks = pool.map((x) => { const cb = h('input', { type: 'checkbox', value: x.id }); cb.addEventListener('change', refresh); return { x, cb }; });
+    const extra = h('div', { class: 'list-plain' });
+    const addRow = (date) => {
+      const d0 = date || C.addDays(today(), 3);
+      const sg = C.suggestShift(store, null, d0, 'fecha', D.regime, 360) || { start: '14:00', end: '20:15' };
+      const r = { date: h('input', { class: 'input', type: 'date', value: d0 }), start: h('input', { class: 'input', type: 'time', value: sg.start }), end: h('input', { class: 'input', type: 'time', value: sg.end }) };
+      const row = h('div', { class: 'dayrow' }, r.date, r.start, r.end, h('button', { class: 'btn icon ghost', 'aria-label': 'Tirar dia', onclick: () => { row.remove(); refresh(); } }, icon('x')));
+      row._r = r;
+      Object.values(r).forEach((x) => x.addEventListener('input', refresh));
+      extra.append(row); refresh();
+    };
+    const summary = h('div', { class: 'sumline' });
+    const warn = h('div', { class: 'callout warn hidden' });
+    function days() {
+      const out = checks.filter((c) => c.cb.checked).map((c) => ({ shift_id: c.x.id, date: c.x.date, start: c.x.start, end: c.x.end, break_min: c.x.break_min }));
+      [...extra.children].forEach((row) => { const r = row._r; if (r.date.value && r.start.value && r.end.value) out.push({ date: r.date.value, start: r.start.value, end: r.end.value }); });
+      return out;
+    }
+    function refresh() {
+      const ds = days();
+      const min = ds.reduce((a, d) => { const t = { start: d.start, end: d.end, break_min: d.break_min != null ? d.break_min : 0 }; let w = C.worked(t); if (d.break_min == null) w -= C.breakFor(w); return a + Math.max(0, w); }, 0);
+      summary.replaceChildren(h('span', { class: 'grow' }, ds.length ? ds.length + (ds.length > 1 ? ' dias · ' : ' dia · ') + C.fmtDur(min) : 'Escolha os dias'), ds.length ? h('b', { class: 'mono' }, '≈ ' + C.money2((min / 60) * (+f.rate.value || 0) * (1 + C.FREELA_REFLEXOS))) : null);
+      const now = new Date(), soon = ds.filter((d) => (C.diffDays(C.todayISO(now), d.date) * 1440 + C.toMin(d.start) - C.nowMin(now)) / 60 < 72);
+      warn.classList.toggle('hidden', !soon.length);
+      warn.replaceChildren(h('b', null, 'Menos de 3 dias de antecedência'), h('span', null, soon.map((d) => dl(d.date)).join(', ') + ' — o intermitente tem que ser convocado com 3 dias corridos (CLT art. 452-A §1º). Dá para mandar, mas fica o alerta.'));
+    }
+    f.rate.addEventListener('input', refresh);
+    if (day) addRow(day);
+    refresh();
+    const submit = async () => {
+      const ds = days();
+      if (!ds.length) return toast('Escolha pelo menos um dia', 'erro');
+      if (!existing) {
+        if (f.name.value.trim().split(/\s+/).length < 2) return toast('Informe nome e sobrenome', 'erro');
+        if (!C.cpfValid(f.cpf.value)) return toast('CPF inválido', 'erro');
+      }
+      const phone = f.phone.value;
+      S.selfUntil = Date.now() + 1500;
+      try {
+        let emp, url, validUntil;
+        if (existing) {
+          const r = await api.post('/api/freelas/' + existing.id + '/convocar', { days: ds });
+          emp = existing; validUntil = r.valid_until;
+          const ls = linkState(existing);
+          url = ls.on ? knownLink(existing) : null;
+          if (!url) { // sem link válido neste aparelho: gera outro
+            const token = newToken();
+            const lr = await api.post('/api/freelas/' + existing.id + '/link', { token });
+            url = pontoUrl(token); validUntil = lr.valid_until;
+            UI.store.set(linkKey(existing.id), { url, created_at: lr.link_created_at });
+          }
+        } else {
+          const token = newToken();
+          const r = await api.post('/api/freelas', { store_id: S.storeId, name: f.name.value, cpf: f.cpf.value, role_id: f.role.value, rate_hour: +f.rate.value, token, days: ds });
+          url = pontoUrl(token); validUntil = r.valid_until;
+          UI.store.set(linkKey(r.employee_id), { url, created_at: r.link_created_at });
+          emp = { id: r.employee_id, name: f.name.value.trim() };
+          if (r.reused) toast('Esse CPF já era freela desta loja — mantive o cadastro');
+        }
+        await load({ flash: [] });
+        shareLink(D.empById[emp.id] || emp, url, validUntil || (D.empById[emp.id] || {}).link.valid_until, phone);
+      } catch (e) { toast(e.message, 'erro'); }
+    };
+    UI.drawer(existing ? 'Convocar ' + UI.first(existing.name) + ' de novo' : 'Convocar freela', [
+      h('div', { class: 'callout' }, h('b', null, 'Freela com escala e ponto = trabalho intermitente'), h('span', null, 'Convoque com 3 dias de antecedência já dizendo a jornada; a pessoa tem 1 dia útil para aceitar (CLT art. 452-A). O link que o sistema gera é essa convocação: por ele a pessoa vê a escala, aceita e bate o ponto — sem login.')),
+      existing ? null : h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Nome completo'), f.name), h('label', { class: 'field' }, h('span', null, 'CPF'), f.cpf)),
+      h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', null, 'Função'), f.role), h('label', { class: 'field' }, h('span', null, 'Valor da hora (R$)'), f.rate)),
+      h('label', { class: 'field' }, h('span', null, 'WhatsApp (opcional — só para abrir a conversa, não fica salvo)'), f.phone),
+      h('div', { class: 'field' }, h('span', null, 'Cobrir turnos abertos'), pool.length ? h('div', { class: 'list-plain' }, checks.map(({ x, cb }) => h('label', { class: 'pickrow' }, cb, h('span', { class: 'grow' }, h('b', null, dl(x.date)), ' ' + x.start + '–' + x.end), h('small', { class: 'muted' }, (D.roles[x.role_id] || {}).name)))) : h('div', { class: 'muted' }, 'Nenhum turno aberto nas próximas duas semanas.')),
+      h('div', { class: 'field' }, h('span', null, 'Ou outros dias'), extra, h('button', { class: 'btn sm', onclick: () => addRow() }, icon('plus'), 'Adicionar dia')),
+      warn, summary,
+      UI.sala || location.hostname !== 'localhost' ? h('p', { class: 'muted', style: { margin: 0, fontSize: '12px' } }, 'Demo público: use dados fictícios (o CPF fica guardado só mascarado).') : null,
+    ], [h('button', { class: 'btn primary', onclick: submit }, icon('link'), 'Convocar e gerar link'), h('button', { class: 'btn', onclick: UI.closeDrawer }, 'Cancelar')]);
+  }
+
   function totalCell(e) {
     const p = D.stats.perEmp[e.id] || { minutes: 0, days: 0 };
     const limit = C.weeklyLimit(e, D.regime);
@@ -224,9 +441,9 @@
     const c = h('div', { class: 'cell' + (day === today() ? ' today' : '') + (!win && !list.length ? ' closed' : ''), dataset: { emp: e ? e.id : '', date: day } });
     if (ab) c.append(h('div', { class: 'absence', title: ab.note || '' }, C.ABSENCE_TYPES[ab.type].label, ab.note ? h('small', null, ab.note) : null));
     list.forEach((s) => c.append(chip(s)));
-    if (e && win && !list.length && !ab) c.append(h('span', { class: 'off' + (C.dow(day) === 0 ? ' sun' : '') }, C.dow(day) === 0 ? 'folga no domingo' : 'folga'));
+    if (e && win && !list.length && !ab && !C.isFreela(e)) c.append(h('span', { class: 'off' + (C.dow(day) === 0 ? ' sun' : '') }, C.dow(day) === 0 ? 'folga no domingo' : 'folga'));
     c.append(h('span', { class: 'add' }, icon('plus')));
-    c.addEventListener('click', (ev) => { if (!ev.target.closest('.chip')) quickAdd(c, e, day); });
+    c.addEventListener('click', (ev) => { if (ev.target.closest('.chip')) return; if (C.isFreela(e)) { if (day >= today()) freelaForm(e, day); } else quickAdd(c, e, day); });
     c.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = ev.altKey || ev.ctrlKey ? 'copy' : 'move'; c.classList.add('drop'); });
     c.addEventListener('dragleave', () => c.classList.remove('drop'));
     c.addEventListener('drop', (ev) => { ev.preventDefault(); c.classList.remove('drop'); const id = ev.dataTransfer.getData('text/plain'); if (id) dropShift(id, e ? e.id : null, day, ev.altKey || ev.ctrlKey); });
@@ -237,15 +454,26 @@
     const role = D.roles[s.role_id] || { color: '#999', name: '' };
     const sev = D.sevByShift[s.id];
     const w = C.worked(s);
-    const sub = s.employee_id ? [C.fmtDur(w), s.break_min ? 'int. ' + C.fromMin(C.breakStart(s)) : null, s.note || null].filter(Boolean).join(' · ') : role.name + ' · em aberto';
+    let sub = s.employee_id ? [C.fmtDur(w), s.break_min ? 'int. ' + C.fromMin(C.breakStart(s)) : null, s.note || null].filter(Boolean).join(' · ') : role.name + ' · em aberto';
+    const conv = D.convByShift[s.id];
+    let convCls = '';
+    if (conv) { // freela: estado da convocação e do ponto
+      const P = conv.punches || [], ent = P.find((p) => p.type === 'entrada'), sai = P.find((p) => p.type === 'saida');
+      if (conv.status === 'pendente') { sub = 'aguardando aceite'; convCls = ' conv-pend'; }
+      else if (sai) sub = '✓ ponto ' + ent.at.slice(11, 16) + '–' + sai.at.slice(11, 16);
+      else if (ent) { sub = 'entrou ' + ent.at.slice(11, 16) + (ent.late ? ' · +' + ent.late + ' min' : ''); convCls = ' conv-in'; }
+      else if (s.date < today() || (s.date === today() && C.nowMin() > C.span(s)[0] + 5)) { sub = 'sem ponto'; convCls = ' conv-miss'; }
+      else sub = 'aceito · ' + C.fmtDur(w);
+    }
     const tips = (D.issuesByShift[s.id] || []).filter((i) => !i.just).map((i) => '• ' + i.title);
     const el = h('div', {
-      class: 'chip' + (s.employee_id ? '' : ' open') + (sev ? ' sev-' + sev : '') + (D.changed.has(s.id) ? ' changed' : '') + (S.flash.has(s.id) ? ' flash' : ''),
-      '--rc': role.color, draggable: 'true', tabindex: '0', role: 'button', dataset: { id: s.id },
+      class: 'chip' + (s.employee_id ? '' : ' open') + convCls + (sev ? ' sev-' + sev : '') + (D.changed.has(s.id) ? ' changed' : '') + (S.flash.has(s.id) ? ' flash' : ''),
+      '--rc': role.color, draggable: conv ? 'false' : 'true', tabindex: '0', role: 'button', dataset: { id: s.id },
       title: [s.start + '–' + s.end + ' · ' + C.fmtDur(w) + ' trabalhadas'].concat(tips, D.changed.has(s.id) ? ['Alterado — ainda não publicado'] : [], ['Arraste para mover · Alt/Ctrl + arrastar copia']).join('\n'),
     }, h('span', { class: 't' }, s.start + '–' + s.end), h('span', { class: 's' }, sub), sev ? h('span', { class: 'flag ' + sev }) : null);
-    el.addEventListener('click', (ev) => { ev.stopPropagation(); editShift(s); });
-    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') editShift(s); if (ev.key === 'Delete' || ev.key === 'Backspace') removeShift(s); });
+    const open = () => (conv && D.empById[conv.employee_id] ? openFreela(D.empById[conv.employee_id]) : editShift(s));
+    el.addEventListener('click', (ev) => { ev.stopPropagation(); open(); });
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') open(); if (!conv && (ev.key === 'Delete' || ev.key === 'Backspace')) removeShift(s); });
     el.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/plain', s.id); ev.dataTransfer.effectAllowed = 'copyMove'; el.classList.add('dragging'); });
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
     return el;
@@ -336,6 +564,7 @@
   // correções de um clique para os casos mais comuns
   function quickFix(i) {
     if (i.just) return null;
+    if (/^(convocacao_|freela_)/.test(i.code) && D.empById[i.emp]) return h('button', { class: 'btn sm ghost', onclick: () => openFreela(D.empById[i.emp]) }, icon('link'), 'Ver freela');
     if (i.code === 'ausencia') return h('button', { class: 'btn sm ghost', onclick: () => mutate(async () => { for (const id of i.ids) await api.put('/api/shifts/' + id, { employee_id: null }); return i.ids; }, 'Turno liberado para a equipe pegar') }, icon('hand'), 'Liberar turno');
     if (i.code === 'cobertura' && i.h0 != null) {
       const sw = C.staffWindow(S.data.store, i.date);
@@ -486,6 +715,7 @@
 
   // ------------------------------------------------------------ pessoas e ausências
   function openEmployee(e) {
+    if (C.isFreela(e)) return openFreela(e);
     const role = D.roles[e.role_id];
     const p = D.stats.perEmp[e.id] || { minutes: 0, days: 0 };
     const abs = S.data.absences.filter((a) => a.employee_id === e.id).sort((a, b) => a.date_ini.localeCompare(b.date_ini));
@@ -733,6 +963,8 @@
     $('btnMore').append(icon('more'));
     $('btnAuto').append(icon('sparkle'), h('span', { class: 'lbl' }, 'Gerar automática'));
     $('btnCopy').append(icon('copy'), h('span', { class: 'lbl' }, 'Copiar semana anterior'));
+    $('btnFreela').append(icon('userplus'), h('span', { class: 'lbl' }, 'Convocar freela'));
+    $('btnFreela').onclick = () => freelaForm();
     $('lnkMural').append(icon('tv'), h('span', { class: 'lbl' }, 'Mural'));
     $('lnkEu').append(icon('phone'), h('span', { class: 'lbl' }, 'Equipe'));
     $('prev').onclick = () => go({ week: C.addDays(S.week, -7) });

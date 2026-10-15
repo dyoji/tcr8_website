@@ -136,3 +136,8 @@ body.idle { cursor: none; }
   .col-week { overflow-x: auto; }
   .wk { min-width: 760px; }
 }
+.pp.missing { border-style: dashed; border-color: color-mix(in srgb, var(--danger) 60%, var(--line)); }
+.pp.missing .left, .pp.missing .meta { color: var(--danger); }
+.pp.missing .bar i { background: var(--danger); opacity: .5; }
+.sh.pend { border: 1px dashed var(--rc); border-left-width: .25rem; background: transparent; }
+.sh.pend .s { color: var(--info); }

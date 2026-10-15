@@ -259,16 +259,16 @@
       }
       if (rules.noturno !== false && nightMin > 0) push('info', 'noturno', emp, null, [], n + ': ' + nightMin + ' min depois das 22h', 'Gera adicional noturno de 20% (hora noturna de 52min30s).', 'CLT art. 73');
 
-      // semana
+      // semana (o freela intermitente é convocado por dia: não tem jornada semanal contratada)
       const total = week.reduce((a, s) => a + worked(s), 0);
       const limit = weeklyLimit(emp, regime);
-      if (total > limit) {
+      if (!isFreela(emp) && total > limit) {
         const strict = emp.contract === 'aprendiz' || emp.contract === 'parcial';
         push(strict ? 'erro' : 'alerta', 'semana', emp, null, week.map((s) => s.id), n + ': ' + fmtDur(total) + ' na semana', (strict ? 'Contrato ' + (emp.contract === 'aprendiz' ? 'de aprendiz' : 'parcial') + ' não admite hora extra. ' : '') + 'Limite de ' + fmtDur(limit) + (regime.id !== 'clt' && emp.weekly_hours * 60 > limit ? ' pela PEC' : '') + '; o que passar vira hora extra (50%).', emp.contract === 'parcial' ? 'CLT art. 58-A' : emp.contract === 'aprendiz' ? 'CLT art. 432' : regime.law);
       }
       const workedDates = new Set(mine.map((s) => s.date));
       const weekWorkDays = days.filter((d) => workedDates.has(d)).length;
-      if (regime.folgas_min >= 2 && weekWorkDays > 7 - regime.folgas_min) push('erro', 'folgas_pec', emp, null, week.map((s) => s.id), n + ': ' + weekWorkDays + ' dias na semana', 'Com a PEC são duas folgas por semana (não precisam ser seguidas).', regime.law);
+      if (!isFreela(emp) && regime.folgas_min >= 2 && weekWorkDays > 7 - regime.folgas_min) push('erro', 'folgas_pec', emp, null, week.map((s) => s.id), n + ': ' + weekWorkDays + ' dias na semana', 'Com a PEC são duas folgas por semana (não precisam ser seguidas).', regime.law);
 
       // 7º dia seguido (DSR)
       let run = 0;
@@ -310,6 +310,26 @@
       if (opens.length) push('info', 'aberto', null, d, opens.map((s) => s.id), dlabel(d) + ': ' + opens.length + (opens.length > 1 ? ' turnos abertos' : ' turno aberto'), 'Sem ninguém escalado — a equipe pode pegar pelo celular.', '');
     }
 
+    // freela intermitente: prazo da convocação, resposta e ponto
+    if (ctx.convocations) {
+      const now = ctx.now || new Date(), today = todayISO(now), nm = now.getHours() * 60 + now.getMinutes();
+      const empById = Object.fromEntries(employees.map((e) => [e.id, e]));
+      for (const c of ctx.convocations) {
+        const sh = shifts.find((x) => x.id === c.shift_id);
+        const emp = empById[c.employee_id];
+        if (!sh || !emp || !inWeek(sh.date) || c.status === 'recusado') continue;
+        const n = firstName(emp) + ' (freela)';
+        const hoursAhead = (diffDays(c.sent_at.slice(0, 10), sh.date) * 1440 + span(sh)[0] - toMin(c.sent_at.slice(11, 16))) / 60;
+        if (hoursAhead < 72) push('alerta', 'convocacao_prazo', emp, sh.date, [sh.id], n + ': convocada com ' + (hoursAhead < 24 ? Math.max(0, Math.round(hoursAhead)) + 'h' : Math.floor(hoursAhead / 24) + ' dia' + (hoursAhead >= 48 ? 's' : '')) + ' de antecedência', 'O intermitente tem que ser convocado com pelo menos 3 dias corridos, já sabendo a jornada.', 'CLT art. 452-A §1º');
+        if (c.status === 'pendente') push('info', 'convocacao_pendente', emp, sh.date, [sh.id], n + ' ainda não respondeu', dlabel(sh.date) + ' ' + sh.start + '–' + sh.end + '. Sem resposta em 1 dia útil, vale como recusa.', 'CLT art. 452-A §2º');
+        const P = c.punches || [];
+        if (c.status === 'aceito' && !P.some((p) => p.type === 'entrada') && (sh.date < today || (sh.date === today && nm > span(sh)[0] + PONTO.tolerancia)))
+          push('alerta', 'freela_sem_ponto', emp, sh.date, [sh.id], n + ': sem ponto de entrada', dlabel(sh.date) + ' — a entrada era às ' + sh.start + '.', '');
+        const late = (P.find((p) => p.type === 'entrada') || {}).late || 0;
+        if (late > 0) push('info', 'freela_atraso', emp, sh.date, [sh.id], n + ': entrou ' + late + ' min atrasada', dlabel(sh.date) + ' — tolerância de 5 min por marcação (10 min no dia).', 'CLT art. 58 §1º');
+      }
+    }
+
     const order = { erro: 0, alerta: 1, info: 2 };
     return out.sort((a, b) => order[a.sev] - order[b.sev] || String(a.date || '').localeCompare(String(b.date || '')));
   }
@@ -320,6 +340,10 @@
   const ENCARGOS = 1.7, WEEKS_MONTH = 4.345;
   const weeklyCost = (emp) => ((emp.salary || 0) * ENCARGOS) / WEEKS_MONTH;
   const hourCost = (emp, regime) => weeklyCost(emp) / (weeklyLimit(emp, regime) / 60);
+  // Intermitente recebe ao fim de cada período a hora + 13º proporcional (1/12) + férias proporcionais com 1/3 (1/9).
+  const FREELA_REFLEXOS = 1 / 12 + 1 / 9;
+  const isFreela = (e) => !!e && e.contract === 'freela';
+  const freelaCost = (e, minutes) => (minutes / 60) * (e.rate_hour || 0) * (1 + FREELA_REFLEXOS);
 
   // ---------------------------------------------------------------- números da semana
   function weekStats(ctx) {
@@ -327,9 +351,10 @@
     const regime = regimeOf(settings);
     const days = weekDays(ws);
     const emp = Object.fromEntries(employees.map((e) => [e.id, e]));
-    const avgHour = employees.reduce((a, e) => a + hourCost(e, regime), 0) / (employees.length || 1);
-    const payroll = employees.reduce((a, e) => a + weeklyCost(e), 0);
-    let minutes = 0, sales = 0, needH = 0, metH = 0, openCount = 0, openCost = 0;
+    const staff = employees.filter((e) => !isFreela(e));
+    const avgHour = staff.reduce((a, e) => a + hourCost(e, regime), 0) / (staff.length || 1);
+    const payroll = staff.reduce((a, e) => a + weeklyCost(e), 0);
+    let minutes = 0, sales = 0, needH = 0, metH = 0, openCount = 0, openCost = 0, freelas = 0;
     const perEmp = {}, perDay = {};
     for (const d of days) {
       const ds = shifts.filter((s) => s.date === d);
@@ -341,9 +366,10 @@
         dm += w;
         if (!s.employee_id) { openCount++; const x = (w / 60) * avgHour * 1.5; dc += x; openCost += x; continue; }
         const e = emp[s.employee_id]; if (!e) continue;
-        dc += (w / 60) * hourCost(e, regime);
         const p = (perEmp[e.id] = perEmp[e.id] || { minutes: 0, days: 0, cost: 0, overtime: 0 });
         p.minutes += w; p.days++;
+        if (isFreela(e)) { const x = freelaCost(e, w); dc += x; p.cost += x; freelas += x; continue; }
+        dc += (w / 60) * hourCost(e, regime);
       }
       const daySales = curve.reduce((a, x) => a + x.sales, 0);
       const dn = cov.reduce((a, x) => a + x.need, 0), dmet = cov.reduce((a, x) => a + Math.min(x.need, x.have + x.open), 0);
@@ -351,22 +377,113 @@
       minutes += dm; sales += daySales; needH += dn; metH += dmet;
     }
     let overtime = 0;
-    for (const e of employees) {
+    for (const e of staff) {
       const p = perEmp[e.id] || (perEmp[e.id] = { minutes: 0, days: 0, cost: 0, overtime: 0 });
       const extra = Math.max(0, p.minutes - weeklyLimit(e, regime));
       p.overtime = (extra / 60) * hourCost(e, regime) * 1.5;
       p.cost = weeklyCost(e) + p.overtime;
       overtime += p.overtime;
     }
-    const cost = payroll + overtime + openCost;
+    const cost = payroll + overtime + openCost + freelas;
     return {
-      minutes, sales, payroll, overtime, openCost, cost, cost_pct: sales ? (cost / sales) * 100 : 0,
+      minutes, sales, payroll, overtime, openCost, freelas, cost, cost_pct: sales ? (cost / sales) * 100 : 0,
       hour_cost: minutes ? cost / (minutes / 60) : 0,
       coverage_pct: needH ? (metH / needH) * 100 : 100, open: openCount, perEmp, perDay,
     };
   }
 
   const money = (v) => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+  const money2 = (v) => 'R$ ' + (Math.round(v * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // ---------------------------------------------------------------- ponto do freela (pelo link)
+  // Libera a entrada 15 min antes; atraso conta acima de 5 min (CLT art. 58 §1º); a volta do intervalo
+  // só libera depois do intervalo escalado. Quem decide é esta função — a tela e a rota usam a mesma.
+  const PONTO = { antes: 15, tolerancia: 5 };
+  const PUNCH_LABEL = { entrada: 'Entrada', intervalo_ini: 'Saída para o intervalo', intervalo_fim: 'Volta do intervalo', saida: 'Saída' };
+  const stampMin = (at) => toMin(at.slice(11, 16)) + (+at.slice(17, 19) || 0) / 60;
+  function pontoNext(conv, shift, now, settings) {
+    const cfg = Object.assign({}, PONTO, settings && settings.ponto);
+    const today = todayISO(now), m = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const [s, e] = span(shift);
+    const P = conv.punches || [];
+    const has = (t) => P.some((p) => p.type === t);
+    if (conv.status === 'pendente') return { ok: false, code: 'aceite', msg: 'Aceite a convocação antes de bater o ponto.' };
+    if (conv.status !== 'aceito') return { ok: false, code: 'recusado', msg: 'Você recusou esse turno.' };
+    if (has('saida')) return { ok: false, code: 'fim', msg: 'Turno encerrado. Obrigado!' };
+    if (shift.date > today) return { ok: false, code: 'futuro', msg: 'Esse turno é ' + DOW_LONG[dow(shift.date)] + ', ' + fmtDay(shift.date) + ', às ' + shift.start + '.' };
+    if (shift.date < today && !has('entrada')) return { ok: false, code: 'passou', msg: 'Esse dia já passou.' };
+    if (!has('entrada')) {
+      const libera = s - cfg.antes;
+      if (m < libera) return { ok: false, code: 'cedo', libera, msg: 'Sua entrada é às ' + shift.start + '. O ponto libera às ' + fromMin(libera) + '.' };
+      if (m >= e) return { ok: false, code: 'tarde', msg: 'O horário desse turno já acabou (' + shift.end + '). Fale com a gerência.' };
+      return { ok: true, actions: [{ type: 'entrada', label: 'Bater entrada' }], late: Math.max(0, Math.floor(m - s)) };
+    }
+    const brk = shift.break_min || 0;
+    if (has('intervalo_ini') && !has('intervalo_fim')) {
+      const volta = stampMin(P.find((p) => p.type === 'intervalo_ini').at) + brk;
+      if (m < volta) return { ok: false, code: 'intervalo', libera: volta, msg: 'Intervalo de ' + brk + ' min: a volta libera às ' + fromMin(Math.ceil(volta)) + '.' };
+      return { ok: true, actions: [{ type: 'intervalo_fim', label: 'Voltar do intervalo' }] };
+    }
+    const actions = [];
+    if (brk && !has('intervalo_ini')) actions.push({ type: 'intervalo_ini', label: 'Sair para o intervalo' });
+    actions.push({ type: 'saida', label: 'Encerrar o turno' });
+    return { ok: true, actions };
+  }
+  // Minutos trabalhados pelas marcações (até agora, se o turno ainda não acabou).
+  function pontoWorked(conv, now) {
+    const P = conv.punches || [];
+    const at = (t) => { const p = P.find((x) => x.type === t); return p ? stampMin(p.at) : null; };
+    const ent = at('entrada'); if (ent == null) return 0;
+    const nowM = now ? now.getHours() * 60 + now.getMinutes() : ent;
+    const sai = at('saida') != null ? at('saida') : nowM;
+    const bi = at('intervalo_ini'), bf = at('intervalo_fim') != null ? at('intervalo_fim') : bi != null ? nowM : null;
+    return Math.max(0, Math.round(sai - ent - (bi != null ? bf - bi : 0)));
+  }
+
+  // ---------------------------------------------------------------- sha256 (para guardar só o hash do link)
+  function sha256(str) {
+    const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    const bytes = unescape(encodeURIComponent(String(str))).split('').map((c) => c.charCodeAt(0));
+    const l = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(i > 3 ? 0 : (l >>> (i * 8)) & 0xff);
+    const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const rot = (x, n) => (x >>> n) | (x << (32 - n));
+    for (let o = 0; o < bytes.length; o += 64) {
+      const w = [];
+      for (let i = 0; i < 16; i++) w[i] = (bytes[o + 4 * i] << 24) | (bytes[o + 4 * i + 1] << 16) | (bytes[o + 4 * i + 2] << 8) | bytes[o + 4 * i + 3];
+      for (let i = 16; i < 64; i++) {
+        const s0 = rot(w[i - 15], 7) ^ rot(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rot(w[i - 2], 17) ^ rot(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+        const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+    return H.map((x) => (x >>> 0).toString(16).padStart(8, '0')).join('');
+  }
+
+  // ---------------------------------------------------------------- CPF
+  const cpfDigits = (v) => String(v || '').replace(/\D/g, '');
+  function cpfCheck(nine) {
+    let d = nine.split('').map(Number);
+    for (const len of [9, 10]) {
+      let sum = 0;
+      for (let i = 0; i < len; i++) sum += d[i] * (len + 1 - i);
+      const r = (sum * 10) % 11;
+      d.push(r === 10 ? 0 : r);
+    }
+    return d.join('');
+  }
+  function cpfValid(v) { const c = cpfDigits(v); return c.length === 11 && !/^(\d)\1{10}$/.test(c) && cpfCheck(c.slice(0, 9)) === c; }
+  const cpfFormat = (v) => cpfDigits(v).replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  const cpfMask = (v) => { const c = cpfDigits(v); return c.length === 11 ? '***.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-**' : ''; };
 
   return {
     pad, iso, parse, addDays, dow, diffDays, weekStart, weekDays, todayISO, nowMin,
@@ -375,6 +492,8 @@
     holiday, isHoliday, holidaysOf, nextHoliday,
     storeWindow, staffWindow, rand, demandCurve, coverage,
     REGIMES, regimeOf, isMinor, weeklyLimit, contractDays, dailyNormal, dailyMax, dailyTarget, suggestShift,
-    ABSENCE_TYPES, absenceOn, validate, weekStats, weeklyCost, hourCost, money,
+    ABSENCE_TYPES, absenceOn, validate, weekStats, weeklyCost, hourCost, money, money2,
+    isFreela, freelaCost, FREELA_REFLEXOS, PONTO, PUNCH_LABEL, stampMin, pontoNext, pontoWorked,
+    sha256, cpfDigits, cpfCheck, cpfValid, cpfFormat, cpfMask,
   };
 });

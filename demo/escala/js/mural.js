@@ -62,10 +62,14 @@
     const empOf = (id) => st.employees.find((e) => e.id === id) || { name: '?' };
     const roleOf = (id) => st.roles.find((r) => r.id === id) || { color: '#888', name: '' };
     const win = C.storeWindow(st.store, d);
-    const todays = st.shifts.filter((s) => s.date === d && s.employee_id && !C.absenceOn(st.absences, s.employee_id, d));
+    // freela: só conta quem aceitou, e só está "na loja" depois de bater a entrada pelo link
+    const convOf = Object.fromEntries((st.convocations || []).filter((c) => c.status !== 'recusado').map((c) => [c.shift_id, c]));
+    const punchAt = (s, t) => { const c = convOf[s.id]; const p = c && (c.punches || []).find((x) => x.type === t); return p ? p.at.slice(11, 16) : null; };
+    const arrived = (s) => !convOf[s.id] || (!!punchAt(s, 'entrada') && !punchAt(s, 'saida'));
+    const todays = st.shifts.filter((s) => s.date === d && s.employee_id && !C.absenceOn(st.absences, s.employee_id, d) && (!convOf[s.id] || convOf[s.id].status === 'aceito'));
     const on = todays.filter((s) => { const [a, b] = C.span(s); return m >= a && m < b; }).sort((a, b) => C.span(a)[1] - C.span(b)[1]);
     const c = win ? C.demandCurve(st.store, d).find((x) => x.h === Math.floor(m / 60)) : null;
-    const present = on.filter((s) => !C.onBreakAt(s, m)).length;
+    const present = on.filter((s) => !C.onBreakAt(s, m) && arrived(s)).length;
     const opened = win && m >= win.open && m < win.close;
     let pill;
     if (!win) pill = h('span', { class: 'pill' }, 'Hoje a loja não abre');
@@ -76,11 +80,12 @@
 
     const person = (s) => {
       const e = empOf(s.employee_id), r = roleOf(s.role_id), [a, b] = C.span(s), brk = C.onBreakAt(s, m), bs = C.breakStart(s), left = b - m;
-      return h('div', { class: 'pp' + (brk ? ' break' : ''), '--rc': r.color },
+      const fr = convOf[s.id], miss = fr && !arrived(s);
+      return h('div', { class: 'pp' + (brk ? ' break' : '') + (miss ? ' missing' : ''), '--rc': r.color },
         h('span', { class: 'av', '--rc': r.color }, UI.initials(e.name)),
         h('b', null, e.name), h('span', { class: 'hrs' }, s.start + '–' + s.end),
-        h('span', { class: 'meta' }, r.name + (s.note ? ' · ' + s.note : '')),
-        h('span', { class: 'left' }, brk ? 'intervalo até ' + C.fromMin(bs + s.break_min) : left <= 60 ? 'sai em ' + Math.ceil(left) + ' min' : 'sai em ' + C.fmtDur(Math.floor(left))),
+        h('span', { class: 'meta' }, fr ? 'Freela · ' + (miss ? 'ainda não bateu o ponto' : 'chegou ' + punchAt(s, 'entrada')) : r.name + (s.note ? ' · ' + s.note : '')),
+        h('span', { class: 'left' }, miss ? 'entrada ' + s.start : brk ? 'intervalo até ' + C.fromMin(bs + s.break_min) : left <= 60 ? 'sai em ' + Math.ceil(left) + ' min' : 'sai em ' + C.fmtDur(Math.floor(left))),
         h('div', { class: 'bar' }, h('i', { style: { width: Math.max(2, ((m - a) / (b - a)) * 100) + '%' } })));
     };
     let body;
@@ -98,7 +103,7 @@
     const evs = [];
     todays.forEach((s) => {
       const [a, b] = C.span(s), nm = UI.first(empOf(s.employee_id).name);
-      if (a > m) evs.push({ t: a, k: 'in', txt: nm + ' chega' });
+      if (a > m && !punchAt(s, 'entrada')) evs.push({ t: a, k: 'in', txt: nm + ' chega' });
       if (b > m) evs.push({ t: b, k: 'out', txt: nm + ' sai' });
       if (s.break_min >= 30) { const bs = C.breakStart(s); if (bs > m) evs.push({ t: bs, k: 'brk', txt: nm + ' vai para o intervalo' }); }
     });
@@ -142,6 +147,8 @@
   }
 
   function renderWeek(st) {
+    const convOf = Object.fromEntries((st.convocations || []).filter((c) => c.status !== 'recusado').map((c) => [c.shift_id, c]));
+    const punchAt = (s, t) => { const c = convOf[s.id]; const p = c && (c.punches || []).find((x) => x.type === t); return p ? p.at.slice(11, 16) : null; };
     const box = $('week');
     if (M.scope === 'published' && !st.publication.published) {
       box.replaceChildren(h('div', { class: 'card unpub' }, h('div', null, h('b', null, 'A escala desta semana ainda não foi publicada'), h('p', null, 'Assim que a gerência publicar, ela aparece aqui sozinha.'))));
@@ -175,9 +182,9 @@
       list.forEach((s) => {
         const r = roleById[s.role_id] || { color: '#888', name: '' };
         const isOn = d === today && m >= C.span(s)[0] && m < C.span(s)[1];
-        c.append(h('div', { class: 'sh' + (e ? '' : ' open') + (isOn && !ab ? ' on' : '') + (ab ? ' canceled' : ''), '--rc': r.color },
+        c.append(h('div', { class: 'sh' + (e ? '' : ' open') + (convOf[s.id] && convOf[s.id].status === 'pendente' ? ' pend' : '') + (isOn && !ab ? ' on' : '') + (ab ? ' canceled' : ''), '--rc': r.color },
           h('span', { class: 't' }, s.start + '–' + s.end),
-          h('span', { class: 's' }, e ? s.note || C.fmtDur(C.worked(s)) : r.name + ' · quem pega?')));
+          h('span', { class: 's' }, !e ? r.name + ' · quem pega?' : convOf[s.id] && convOf[s.id].status === 'pendente' ? 'freela · a confirmar' : convOf[s.id] ? 'freela · ' + (punchAt(s, 'entrada') ? 'entrou ' + punchAt(s, 'entrada') : C.fmtDur(C.worked(s))) : s.note || C.fmtDur(C.worked(s)))));
       });
       if (e && win && !list.length && !ab) c.append(h('div', { class: 'off' + (C.dow(d) === 0 ? ' sun' : '') }, 'folga'));
       return c;
@@ -188,7 +195,7 @@
     }
     emps.forEach((e) => {
       const r = roleById[e.role_id];
-      wk.append(h('div', { class: 'wn', '--rc': r.color }, h('span', { class: 'av', '--rc': r.color }, UI.initials(e.name)), h('div', { style: { minWidth: 0 } }, h('b', null, e.name), h('small', null, r.name))));
+      wk.append(h('div', { class: 'wn', '--rc': r.color }, h('span', { class: 'av', '--rc': r.color }, UI.initials(e.name)), h('div', { style: { minWidth: 0 } }, h('b', null, e.name), h('small', null, r.name + (e.contract === 'freela' ? ' · freela' : '')))));
       days.forEach((d, i) => wk.append(cellW(e, d, i)));
     });
     box.replaceChildren(h('div', { class: 'card', style: { padding: 0, overflow: 'hidden', height: '100%' } }, wk));
@@ -257,7 +264,7 @@
     await fetchStore(ev.store_id);
     if (ev.type === 'published' && M.order[M.idx] !== ev.store_id) M.idx = M.order.indexOf(ev.store_id);
     render();
-    if (ev.type === 'published' || (M.scope === 'draft' && ev.type === 'draft')) banner(ev.msg || 'Escala atualizada');
+    if (ev.type === 'published' || ev.type === 'ponto' || (M.scope === 'draft' && ev.type === 'draft')) banner(ev.msg || 'Escala atualizada');
   }
 
   async function wakeLock() {

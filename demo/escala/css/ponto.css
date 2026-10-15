@@ -1,0 +1,49 @@
+/* Escala (demo tCr8) — ponto do freela pelo link (celular primeiro) */
+body { min-height: 100vh; }
+.ph { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.ph .brand-tag { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+.pm { max-width: 520px; margin: 0 auto; padding: 16px 16px 48px; display: grid; gap: 14px; }
+.hello h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.hello small { color: var(--muted); }
+.clock { display: grid; justify-items: center; gap: 2px; padding: 18px 12px 16px; border-radius: 16px; background: var(--ink); color: var(--bg); }
+.clock .t { font: 700 52px/1 var(--mono); letter-spacing: -.06em; font-variant-numeric: tabular-nums; }
+.clock .d { font-size: 13.5px; opacity: .75; }
+.clock .src { font: 500 10.5px var(--mono); opacity: .55; text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 12px; }
+.card h2 { margin: 0; font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 650; }
+.shiftline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.shiftline .t { font: 700 26px var(--mono); letter-spacing: -.05em; }
+.shiftline small { color: var(--muted); }
+.punchbtn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 64px; border-radius: 14px; border: 0; font: 700 18px var(--font); cursor: pointer; background: var(--accent); color: #15170f; transition: transform .06s, opacity .15s; }
+.punchbtn:active { transform: scale(.98); }
+.punchbtn.alt { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-2); font-size: 16px; min-height: 54px; }
+.punchbtn[disabled] { background: var(--sunken); color: var(--muted); cursor: not-allowed; }
+.punchbtn .ic { width: 20px; height: 20px; }
+.why { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--ink); font-size: 14px; }
+.why b { color: var(--warn); }
+.why .cd { font: 600 22px var(--mono); letter-spacing: -.03em; color: var(--ink); }
+.done { padding: 12px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.receipt { border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 14px; display: grid; gap: 6px; background: var(--surface-2); animation: pop .4s ease-out; }
+@keyframes pop { from { transform: scale(.96); opacity: 0; } }
+.receipt h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ok); display: flex; gap: 6px; align-items: center; }
+.receipt .big { font: 700 30px var(--mono); letter-spacing: -.04em; }
+.receipt dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+.receipt dt { color: var(--muted); } .receipt dd { margin: 0; font-family: var(--mono); }
+.plist { display: flex; flex-wrap: wrap; gap: 6px; }
+.plist span { font-size: 12.5px; padding: 4px 9px; border-radius: 7px; background: var(--sunken); }
+.plist b { font-family: var(--mono); }
+.conv { display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.conv:first-of-type { border-top: 0; padding-top: 0; }
+.conv .dt { display: grid; justify-items: center; align-content: start; }
+.conv .dt b { font: 700 20px var(--mono); letter-spacing: -.05em; }
+.conv .dt small { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.conv .body { display: grid; gap: 6px; min-width: 0; }
+.conv .tt { font: 600 17px var(--mono); letter-spacing: -.04em; }
+.conv .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.conv.today .dt b { background: var(--accent); color: #15170f; border-radius: 6px; padding: 0 5px; }
+.pay { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; }
+.pay b { font: 700 20px var(--mono); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.dead { text-align: center; padding: 36px 18px; display: grid; gap: 10px; justify-items: center; }
+.dead .ic { width: 40px; height: 40px; color: var(--muted); }
+.dead h1 { margin: 0; font-size: 22px; }

@@ -10,7 +10,11 @@
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const pubKey = (sid, ws) => sid + '|' + ws;
-  const nowStamp = () => { const d = new Date(); return C.todayISO(d) + 'T' + C.pad(d.getHours()) + ':' + C.pad(d.getMinutes()) + ':' + C.pad(d.getSeconds()); };
+  // Relógio das regras (o ponto depende dele). No modo hospedado o local.js acerta pela hora do servidor.
+  let clock = () => new Date();
+  const setClock = (fn) => { clock = fn; };
+  const stampOf = (d) => C.todayISO(d) + 'T' + C.pad(d.getHours()) + ':' + C.pad(d.getMinutes()) + ':' + C.pad(d.getSeconds());
+  const nowStamp = () => stampOf(clock());
   const bad = (msg, code) => { const e = new Error(msg); e.status = code || 400; throw e; };
   const FIELDS = ['employee_id', 'date', 'start', 'end', 'break_min', 'break_at', 'role_id', 'note'];
   const nn = (v) => (v === undefined ? null : v);
@@ -35,6 +39,14 @@
     return { published: true, published_at: pub.published_at, by: pub.by, added, removed, changed, total: added.length + removed.length + changed.length };
   }
 
+  // O hash do link nunca sai daqui; o token de demonstração (só nos freelas de exemplo) sai para o gestor abrir o link.
+  function publicEmp(e) {
+    if (!e.link) return e;
+    const o = Object.assign({}, e, { link: Object.assign({}, e.link) });
+    delete o.link.hash; delete o.cpf_hash;
+    return o;
+  }
+
   function state(db, q) {
     q = q || {};
     const store = db.stores.find((s) => s.id === q.store) || db.stores[0];
@@ -48,8 +60,9 @@
       version: db.version, server_now: nowStamp(), settings: db.settings, regimes: C.REGIMES, company: db.company,
       roles: db.roles, stores: db.stores.map((s) => ({ id: s.id, name: s.name, short: s.short, kind: s.kind })),
       store, week: ws, scope: published ? 'published' : 'draft',
-      employees: db.employees.filter((e) => e.store_id === store.id && e.active !== false),
+      employees: db.employees.filter((e) => e.store_id === store.id && e.active !== false).map(publicEmp),
       shifts,
+      convocations: (db.convocations || []).filter((c) => ids.has(c.employee_id)).map((c) => { const sh = db.shifts.find((x) => x.id === c.shift_id); return Object.assign({}, c, { shift: sh ? { date: sh.date, start: sh.start, end: sh.end, break_min: sh.break_min || 0 } : null }); }),
       absences: db.absences.filter((a) => ids.has(a.employee_id) && a.date_end >= C.addDays(ws, -49) && a.date_ini <= C.addDays(we, 21)),
       requests: db.requests.filter((r) => r.store_id === store.id).slice(-40),
       publication: diff(db, store.id, ws),
@@ -68,6 +81,70 @@
     const storeOf = (id) => db.stores.find((s) => s.id === id);
     const empOf = (id) => db.employees.find((e) => e.id === id);
     const firstName = (id) => { const e = empOf(id); return e ? e.name.split(' ')[0] : 'Turno aberto'; };
+    db.convocations = db.convocations || [];
+    db.nsr = db.nsr || 0;
+    const isFreelaShift = (sh) => !!sh.employee_id && C.isFreela(empOf(sh.employee_id));
+    const dl = (d) => C.DOW_SHORT[C.dow(d)] + ' ' + C.fmtDay(d);
+    const weekPublished = (storeId, date) => !!db.publications[pubKey(storeId, C.weekStart(date))];
+    const addPublished = (sh) => { const pub = db.publications[pubKey(sh.store_id, C.weekStart(sh.date))]; if (pub && !pub.shifts.some((x) => x.id === sh.id)) pub.shifts.push(clone(sh)); };
+    const tokenOk = (t) => typeof t === 'string' && /^[A-Za-z0-9_-]{16,80}$/.test(t);
+
+    // convoca o freela para os dias (cobrindo turno aberto quando vier shift_id)
+    function convocar(emp, days) {
+      if (!Array.isArray(days) || !days.length) bad('Escolha pelo menos um dia');
+      if (days.length > 14) bad('No máximo 14 dias por convocação');
+      const made = [];
+      for (const d of days) {
+        let sh = d.shift_id && db.shifts.find((x) => x.id === d.shift_id && x.store_id === emp.store_id && !x.employee_id);
+        if (sh) patchEverywhere(sh.id, { employee_id: emp.id, role_id: emp.role_id });
+        else {
+          sh = sanitizeShift({ date: d.date, start: d.start, end: d.end, break_min: d.break_min, note: d.note }, { id: newId(), store_id: emp.store_id, employee_id: emp.id, role_id: emp.role_id, break_min: 0 });
+          if (d.break_min === undefined) sh.break_min = C.breakFor(C.worked(sh));
+          db.shifts.push(sh);
+          addPublished(sh);
+        }
+        if (db.convocations.some((c) => c.shift_id === sh.id && c.status !== 'recusado')) continue;
+        const c = { id: newId('c'), employee_id: emp.id, shift_id: sh.id, sent_at: nowStamp(), status: 'pendente', answered_at: null, punches: [] };
+        db.convocations.push(c);
+        made.push({ conv: c, shift: sh });
+      }
+      return made;
+    }
+    function lastDay(emp) {
+      const dates = db.convocations.filter((c) => c.employee_id === emp.id && c.status !== 'recusado').map((c) => (db.shifts.find((x) => x.id === c.shift_id) || {}).date).filter(Boolean).sort();
+      return dates[dates.length - 1] || C.todayISO(clock());
+    }
+    function setLink(emp, token, validUntil) {
+      if (!tokenOk(token)) bad('Link inválido');
+      emp.link = { hash: C.sha256(token), created_at: nowStamp(), valid_until: validUntil && /^\d{4}-\d{2}-\d{2}/.test(validUntil) ? validUntil.slice(0, 10) + 'T23:59:59' : lastDay(emp) + 'T23:59:59', revoked: false };
+    }
+    // acha o freela pelo link e diz se ainda vale
+    function byToken(t) {
+      if (!tokenOk(t)) return { reason: 'invalido' };
+      const h = C.sha256(t);
+      const emp = db.employees.find((e) => e.link && e.link.hash === h);
+      if (!emp || emp.active === false) return { reason: 'invalido' };
+      if (emp.link.revoked) return { reason: 'revogado', emp };
+      if (nowStamp() > emp.link.valid_until) return { reason: 'expirado', emp };
+      return { emp };
+    }
+    function pontoView(emp) {
+      const now = clock();
+      const store = storeOf(emp.store_id) || {};
+      const role = db.roles.find((r) => r.id === emp.role_id) || { name: '' };
+      const items = db.convocations.filter((c) => c.employee_id === emp.id).map((c) => {
+        const sh = db.shifts.find((x) => x.id === c.shift_id) || null;
+        if (!sh) return null;
+        const worked = C.pontoWorked(c, sh.date === C.todayISO(now) ? now : null);
+        return { id: c.id, date: sh.date, start: sh.start, end: sh.end, break_min: sh.break_min || 0, status: c.status, sent_at: c.sent_at, punches: c.punches || [],
+          next: C.pontoNext(c, sh, now, db.settings), worked, pay: C.freelaCost(emp, worked) };
+      }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+      return {
+        ok: true, now: nowStamp(), name: emp.name, cpf: emp.cpf_mask, role: role.name, rate_hour: emp.rate_hour || 0, reflexos: C.FREELA_REFLEXOS,
+        store: { id: store.id, name: store.name, kind: store.kind }, company: db.company && db.company.name, valid_until: emp.link.valid_until,
+        ponto: Object.assign({}, C.PONTO, db.settings.ponto), items,
+      };
+    }
     const log = (store_id, msg) => { db.log.push({ at: nowStamp(), store_id, msg }); if (db.log.length > 200) db.log.splice(0, db.log.length - 200); };
 
     function sanitizeShift(src, base) {
@@ -119,9 +196,10 @@
         const store = storeOf(b.store_id) || bad('Loja não existe');
         const ws = C.weekStart(b.week), we = C.addDays(ws, 6);
         const settings = Object.assign({}, db.settings, b.regime ? { regime: b.regime } : {});
-        db.shifts = db.shifts.filter((s) => !(s.store_id === store.id && s.date >= ws && s.date <= we));
+        db.shifts = db.shifts.filter((s) => !(s.store_id === store.id && s.date >= ws && s.date <= we) || isFreelaShift(s));
         const res = A.autoSchedule({
           settings, store, weekStart: ws, newId: () => newId(), absences: db.absences,
+          fixed: db.shifts.filter((s) => s.store_id === store.id && s.date >= ws && s.date <= we && isFreelaShift(s)),
           employees: db.employees.filter((e) => e.store_id === store.id),
           shifts: db.shifts.filter((s) => s.store_id === store.id && s.date >= C.addDays(ws, -56) && s.date < ws),
         });
@@ -158,9 +236,9 @@
       'POST /api/week/copy': () => {
         const store = storeOf(b.store_id) || bad('Loja não existe');
         const ws = C.weekStart(b.week), we = C.addDays(ws, 6), prev = C.addDays(ws, -7);
-        const src = db.shifts.filter((s) => s.store_id === store.id && s.date >= prev && s.date < ws);
+        const src = db.shifts.filter((s) => s.store_id === store.id && s.date >= prev && s.date < ws && !isFreelaShift(s));
         if (!src.length) bad('A semana anterior está vazia');
-        db.shifts = db.shifts.filter((s) => !(s.store_id === store.id && s.date >= ws && s.date <= we));
+        db.shifts = db.shifts.filter((s) => !(s.store_id === store.id && s.date >= ws && s.date <= we) || isFreelaShift(s));
         const made = src.map((s) => {
           const date = C.addDays(s.date, 7);
           const busy = s.employee_id && C.absenceOn(db.absences, s.employee_id, date);
@@ -172,7 +250,7 @@
       },
       'POST /api/week/clear': () => {
         const ws = C.weekStart(b.week), we = C.addDays(ws, 6);
-        db.shifts = db.shifts.filter((s) => !(s.store_id === b.store_id && s.date >= ws && s.date <= we));
+        db.shifts = db.shifts.filter((s) => !(s.store_id === b.store_id && s.date >= ws && s.date <= we) || isFreelaShift(s));
         emit({ type: 'draft', store_id: b.store_id, week: ws });
         return { ok: true };
       },
@@ -284,6 +362,107 @@
         emit({ type: 'settings' });
         return db.settings;
       },
+      // ---------------- freela intermitente (CLT art. 452-A): cadastro, convocação e link
+      'POST /api/freelas': () => {
+        const store = storeOf(b.store_id) || bad('Loja não existe');
+        const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+        if (name.split(' ').length < 2) bad('Informe nome e sobrenome');
+        if (!C.cpfValid(b.cpf)) bad('CPF inválido');
+        if (!db.roles.some((r) => r.id === b.role_id)) bad('Função inválida');
+        const cpfHash = C.sha256(C.cpfDigits(b.cpf));
+        let emp = db.employees.find((e) => e.store_id === store.id && e.cpf_hash === cpfHash);
+        const reused = !!emp;
+        if (emp) Object.assign(emp, { name, role_id: b.role_id, rate_hour: Math.max(0, +b.rate_hour || emp.rate_hour || 0), active: true });
+        else {
+          emp = { id: newId('f'), store_id: store.id, name, role_id: b.role_id, contract: 'freela', weekly_hours: 0, gender: null, skills: [], unavail: [], active: true,
+            rate_hour: Math.max(0, Math.min(500, +b.rate_hour || 0)), cpf_hash: cpfHash, cpf_mask: C.cpfMask(b.cpf), created_at: nowStamp() };
+          db.employees.push(emp);
+        }
+        const made = convocar(emp, b.days);
+        setLink(emp, b.token, b.valid_until);
+        const first = name.split(' ')[0];
+        log(store.id, 'Convocação enviada para ' + first + ' (freela): ' + made.length + (made.length === 1 ? ' dia' : ' dias'));
+        const pubd = made.some((x) => weekPublished(store.id, x.shift.date));
+        emit({ type: pubd ? 'published' : 'draft', store_id: store.id, week: made[0] ? C.weekStart(made[0].shift.date) : null, ids: made.map((x) => x.shift.id), msg: 'Convocação enviada para ' + first + ' — aguardando aceite' });
+        return { employee_id: emp.id, valid_until: emp.link.valid_until, link_created_at: emp.link.created_at, convocations: made.map((x) => x.conv.id), reused };
+      },
+      'POST /api/freelas/:id/convocar': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        const made = convocar(emp, b.days);
+        if (emp.link && !emp.link.revoked && emp.link.valid_until < lastDay(emp) + 'T23:59:59') emp.link.valid_until = lastDay(emp) + 'T23:59:59';
+        log(emp.store_id, 'Nova convocação para ' + firstName(emp.id) + ' (freela): mais ' + made.length + (made.length === 1 ? ' dia' : ' dias'));
+        emit({ type: made.some((x) => weekPublished(emp.store_id, x.shift.date)) ? 'published' : 'draft', store_id: emp.store_id, week: made[0] ? C.weekStart(made[0].shift.date) : null, ids: made.map((x) => x.shift.id), msg: 'Nova convocação para ' + firstName(emp.id) });
+        return { count: made.length, valid_until: emp.link && emp.link.valid_until };
+      },
+      'POST /api/freelas/:id/link': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        setLink(emp, b.token, b.valid_until);
+        log(emp.store_id, 'Novo link de ponto para ' + firstName(emp.id) + ' (o anterior deixou de valer)');
+        emit({ type: 'freela', store_id: emp.store_id, msg: 'Novo link gerado para ' + firstName(emp.id) });
+        return { valid_until: emp.link.valid_until, link_created_at: emp.link.created_at };
+      },
+      'POST /api/freelas/:id/revoke': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp) || !emp.link) bad('Freela não existe', 404);
+        emp.link.revoked = true;
+        log(emp.store_id, 'Link de ponto de ' + firstName(emp.id) + ' cancelado');
+        emit({ type: 'freela', store_id: emp.store_id, msg: 'Link de ' + firstName(emp.id) + ' cancelado' });
+        return { ok: true };
+      },
+      'POST /api/freelas/:id/cancel': (id) => {
+        const emp = empOf(id); if (!C.isFreela(emp)) bad('Freela não existe', 404);
+        const c = db.convocations.find((x) => x.id === b.conv_id && x.employee_id === emp.id) || bad('Convocação não existe');
+        if ((c.punches || []).length) bad('Esse turno já tem ponto batido');
+        c.status = 'recusado'; c.answered_at = nowStamp(); c.canceled = true;
+        const sh = db.shifts.find((x) => x.id === c.shift_id);
+        if (sh) patchEverywhere(sh.id, { employee_id: null });
+        log(emp.store_id, 'Convocação de ' + firstName(emp.id) + (sh ? ' em ' + dl(sh.date) : '') + ' cancelada — turno voltou a ficar aberto');
+        emit({ type: sh && weekPublished(emp.store_id, sh.date) ? 'published' : 'draft', store_id: emp.store_id, week: sh && C.weekStart(sh.date), ids: sh ? [sh.id] : [], msg: 'Convocação de ' + firstName(emp.id) + ' cancelada' });
+        return { ok: true };
+      },
+
+      // ---------------- ponto pelo link (público, sem login: o link é a credencial)
+      'GET /api/ponto': () => {
+        const r = byToken(q.t);
+        if (!r.emp || r.reason) return { ok: false, reason: r.reason || 'invalido', name: r.emp ? r.emp.name.split(' ')[0] : null, store: r.emp ? (storeOf(r.emp.store_id) || {}).name : null };
+        return pontoView(r.emp);
+      },
+      'POST /api/ponto/responder': () => {
+        const r = byToken(b.t); if (r.reason) bad(r.reason === 'expirado' ? 'Este link expirou' : 'Link inválido', 403);
+        const emp = r.emp;
+        const c = db.convocations.find((x) => x.id === b.conv_id && x.employee_id === emp.id) || bad('Convocação não encontrada');
+        if (c.status !== 'pendente') bad('Você já respondeu esta convocação');
+        const sh = db.shifts.find((x) => x.id === c.shift_id) || bad('O turno não existe mais');
+        const ok = b.answer === 'aceito';
+        c.status = ok ? 'aceito' : 'recusado'; c.answered_at = nowStamp();
+        if (!ok) patchEverywhere(sh.id, { employee_id: null });
+        const msg = firstName(emp.id) + ' (freela) ' + (ok ? 'aceitou ' : 'recusou ') + dl(sh.date) + ' ' + sh.start + '–' + sh.end + (ok ? '' : ' — turno voltou a ficar aberto');
+        log(emp.store_id, msg);
+        emit({ type: weekPublished(emp.store_id, sh.date) ? 'published' : 'draft', store_id: emp.store_id, week: C.weekStart(sh.date), ids: [sh.id], msg });
+        return pontoView(emp);
+      },
+      'POST /api/ponto/bater': () => {
+        const r = byToken(b.t); if (r.reason) bad(r.reason === 'expirado' ? 'Este link expirou' : 'Link inválido', 403);
+        const emp = r.emp, now = clock();
+        const c = db.convocations.find((x) => x.id === b.conv_id && x.employee_id === emp.id) || bad('Convocação não encontrada');
+        const sh = db.shifts.find((x) => x.id === c.shift_id) || bad('O turno não existe mais');
+        const next = C.pontoNext(c, sh, now, db.settings);
+        if (!next.ok) bad(next.msg, 409);
+        if (!next.actions.some((a) => a.type === b.type)) bad('Agora o registro é: ' + next.actions.map((a) => a.label.toLowerCase()).join(' ou '), 409);
+        const tol = (Object.assign({}, C.PONTO, db.settings.ponto)).tolerancia;
+        const punch = { type: b.type, at: nowStamp(), nsr: ++db.nsr };
+        if (b.type === 'entrada' && next.late > tol) punch.late = next.late;
+        c.punches = (c.punches || []).concat([punch]);
+        const hhmm = punch.at.slice(11, 16);
+        const msg = firstName(emp.id) + ' (freela) ' + ({ entrada: 'chegou', intervalo_ini: 'saiu para o intervalo', intervalo_fim: 'voltou do intervalo', saida: 'encerrou o turno' })[b.type] + ' às ' + hhmm + (punch.late ? ' — ' + punch.late + ' min de atraso' : '');
+        log(emp.store_id, msg);
+        emit({ type: 'ponto', store_id: emp.store_id, week: C.weekStart(sh.date), ids: [sh.id], msg });
+        const store = storeOf(emp.store_id) || {};
+        return {
+          comprovante: { nsr: punch.nsr, at: punch.at, tipo: C.PUNCH_LABEL[b.type], nome: emp.name, cpf: emp.cpf_mask, empresa: db.company && db.company.name, loja: store.name, late: punch.late || 0 },
+          view: pontoView(emp),
+        };
+      },
+
       'POST /api/reset': () => {
         const fresh = Seed.seed();
         fresh.version = db.version || 0;
@@ -302,5 +481,5 @@
     return { result, db, events };
   }
 
-  return { handle, state, diff, isStale, seed: Seed.seed };
+  return { handle, state, diff, isStale, setClock, now: () => clock(), seed: Seed.seed };
 });

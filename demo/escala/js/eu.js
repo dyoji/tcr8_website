@@ -32,7 +32,7 @@
       h('h2', null, 'Quem é você?'),
       h('p', { class: 'lead' }, 'No demo não tem login: escolha uma pessoa para ver a escala como ela vê no celular.'),
       h('div', { class: 'seg' }, st.stores.map((s) => h('button', { 'aria-pressed': String(s.id === st.store.id), onclick: () => picker(s.id) }, s.short))),
-      h('div', { class: 'people-list' }, st.employees.map((e) => h('button', { class: 'pick', onclick: () => choose(st.store.id, e.id) },
+      h('div', { class: 'people-list' }, st.employees.filter((e) => e.contract !== 'freela').map((e) => h('button', { class: 'pick', onclick: () => choose(st.store.id, e.id) },
         h('span', { class: 'av', '--rc': roles[e.role_id].color }, UI.initials(e.name)),
         h('span', null, h('b', null, e.name), h('small', null, roles[e.role_id].name + ' · ' + st.store.name)))))));
   }
@@ -164,7 +164,7 @@
       h('button', { class: 'pick', style: sel(to === null), onclick: () => { to = null; draw(); } },
         h('span', { class: 'av', style: { background: 'var(--sunken)', color: 'var(--muted)' } }, icon('hand')),
         h('span', null, h('b', null, 'Qualquer pessoa'), h('small', null, 'vira turno aberto; quem pegar leva'))),
-      ...d.employees.filter((e) => e.id !== E.me).map((e) => {
+      ...d.employees.filter((e) => e.id !== E.me && e.contract !== 'freela').map((e) => {
         const busy = d.shifts.some((x) => x.employee_id === e.id && x.date === s.date) || !!C.absenceOn(d.absences, e.id, s.date);
         return h('button', { class: 'pick', disabled: busy || null, style: sel(to === e.id), onclick: () => { to = e.id; draw(); } },
           h('span', { class: 'av', '--rc': roles[e.role_id].color }, UI.initials(e.name)),
